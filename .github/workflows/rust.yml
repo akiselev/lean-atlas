@@ -1,0 +1,19 @@
+name: Rust
+
+on:
+  push:
+    branches: [master, "agent/**"]
+  pull_request:
+
+jobs:
+  atlas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Test Atlas engine
+        run: cargo test -p atlas
