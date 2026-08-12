@@ -47,19 +47,26 @@ plain Lean  →  lake build  →  atlas_extract  →  JSONL  →  Rust engine (c
    *argument* rests on) and, for the skeleton queries, a `--level
    exact|presentation|instances|carriers|shape` erasure depth.
 
-3. **Intuit** (`crates/atlas/src/intuition.rs`, `atlas-intuition`). The intuition engine
+3. **Intuit** (`crates/atlas/src/intuition*.rs`, `atlas-intuition`). The intuition engine
    treats mathematical intuition as choosing productive changes of representation. It
    extracts auditable affordances from the elaborated statement AST, scores a bootstrap
-   catalogue of methods/transforms, deliberately diversifies the resulting research beams,
-   and keeps failed attempts as negative search-policy evidence rather than Lean facts.
+   catalogue of methods/transforms, deliberately diversifies research beams, searches
+   multi-step viewpoint graphs, mines formal concepts in declaration × affordance data, and
+   keeps failed attempts as negative search-policy evidence rather than Lean facts.
 
    ```sh
    cargo run -p atlas --bin atlas-intuition -- profile slice.jsonl My.Theorem
    cargo run -p atlas --bin atlas-intuition -- rank slice.jsonl My.Theorem --top 12
+   cargo run -p atlas --bin atlas-intuition -- pareto slice.jsonl My.Theorem
    cargo run -p atlas --bin atlas-intuition -- refract slice.jsonl My.Theorem
+   cargo run -p atlas --bin atlas-intuition -- explore slice.jsonl My.Theorem --depth 3 --beam 12
    cargo run -p atlas --bin atlas-intuition -- auxiliary slice.jsonl My.Theorem
    cargo run -p atlas --bin atlas-intuition -- bridge slice.jsonl Algebra Geometry
    cargo run -p atlas --bin atlas-intuition -- toy-worlds slice.jsonl My.Theorem
+   cargo run -p atlas --bin atlas-intuition -- concepts slice.jsonl Physics --top 100
+   cargo run -p atlas --bin atlas-intuition -- implications slice.jsonl Physics --min-support 10
+   cargo run -p atlas --bin atlas-intuition -- missing-cells slice.jsonl Classical Quantum
+   cargo run -p atlas --bin atlas-intuition -- benchmark slice.jsonl historical-cases.jsonl
    cargo run -p atlas --bin atlas-intuition -- dream slice.jsonl --experience attempts.jsonl
    ```
 
@@ -72,11 +79,24 @@ plain Lean  →  lake build  →  atlas_extract  →  JSONL  →  Rust engine (c
      tropicalize, finite analogue, discretize, continuum limit;
    - **representation breadth** — how many mature method families become structurally
      plausible in a representation; proposals are rewarded when they enlarge that set;
+   - **viewpoint graphs** — bounded quality-diversity search over sequences of representation
+     changes; every path accumulates the proposed method's proof obligations and known
+     information losses;
+   - **Pareto taste** — a non-dominated frontier over compatibility, domain distance, bridge
+     value, novelty, breadth gain, and experience, so one arbitrary scalar score is not the
+     only research-policy view;
    - **bridge proposals** — a directed question of the form “method M fits theory A and
      exposes structure already useful in theory B”; this is not a claim that A and B are
      analogous;
+   - **formal concepts and corpus implications** — exact regularities in the *extracted
+     affordance context*. They are hypotheses about the corpus, not mathematical theorems;
+   - **missing structural cells** — globally common affordances absent from a named theory;
+     useful only when independent neighborhood/alignment evidence says the role should be
+     occupied;
    - **negative experience** — optional JSONL records of succeeded/failed/refuted/blocked
      research actions; failures penalize but never silently delete a route;
+   - **historical/counterfactual benchmarks** — frozen answer-key cases scored by top-k hit
+     rate and MRR; meaningful only when the corpus itself is frozen before the hidden method;
    - **dream motifs** — recurrent ordered method transitions, a first substrate for later
      MDL/grammar induction and method invention.
 
@@ -123,3 +143,6 @@ paths to `/tmp` slices or corpora that must be re-extracted before they run.
   extraction is auditable evidence from the elaborated term; method scoring is a heuristic
   policy over that evidence. A high score means “worth trying under this policy,” never
   “likely true” or “historically novel.”
+- **Corpus implications are not theorem implications.** FCA closes over what the extracted
+  library happens to contain. Any promoted implication needs held-out validation and, when
+  meaningful, a formal proof/refutation step.
