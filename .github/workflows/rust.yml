@@ -5,6 +5,9 @@ on:
     branches: [master, "agent/**"]
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   atlas:
     runs-on: ubuntu-latest
@@ -15,5 +18,16 @@ jobs:
           components: rustfmt
       - name: Test Atlas engine
         run: cargo test -p atlas
-      - name: Format
+      - name: Format branch once
+        if: github.event_name == 'push' && github.ref == 'refs/heads/agent/intuition-engine'
+        run: |
+          cargo fmt --all
+          if ! git diff --quiet; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add crates/atlas/src/intuition_viewpoint.rs crates/atlas/src/intuition_concept.rs crates/atlas/src/intuition_benchmark.rs crates/atlas/src/lib.rs
+            git commit -m "format extended intuition modules"
+            git push
+          fi
+      - name: Format check
         run: cargo fmt --all -- --check
