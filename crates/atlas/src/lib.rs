@@ -6,6 +6,7 @@
 pub mod dict;
 pub mod equiv;
 pub mod graph;
+pub mod intuition;
 pub mod json;
 pub mod logical;
 pub mod relation;
