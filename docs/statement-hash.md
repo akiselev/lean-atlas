@@ -78,7 +78,7 @@ holding the target, so a 64-bit non-cryptographic hash is not an option.
 Therefore:
 
 * **Lean produces the encoding.** That is the whole Lean-side obligation.
-* **Rust digests it** — SHA-256 over the encoding's UTF-8 bytes, in `atlas` / `fh check`, where a
+* **Rust digests it** — SHA-256 over the encoding's UTF-8 bytes, in `atlas` / `atlas check`, where a
   vetted implementation exists as a dependency rather than as our code.
 * **B8 keys in Lean on the encoding itself** (bucketed by `String.hash`, compared exactly on
   collision), so the Lean side never needs a digest and no SHA-256 has to be written in Lean.

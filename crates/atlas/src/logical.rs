@@ -509,7 +509,8 @@ mod tests {
     #[test]
     fn a_non_dependent_arrow_is_an_implication() {
         // `Even n → Odd n` with `n` an outer binder: the body mentions `#1`, never `#0`.
-        let (a, t) = arena_with("atlas-stmt-v1;pd(c(3:Nat,0),pd(a(c(4:Even,0),b0),a(c(3:Odd,0),b1)))");
+        let (a, t) =
+            arena_with("atlas-stmt-v1;pd(c(3:Nat,0),pd(a(c(4:Even,0),b0),a(c(3:Odd,0),b1)))");
         let inner = match a.node(t) {
             Node::Pi(_, _, body) => body,
             _ => panic!("expected a Pi"),

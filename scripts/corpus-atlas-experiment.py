@@ -524,15 +524,15 @@ def x8_foundations(c: fa.Corpus, manifest: dict) -> Result:
                 continue
             checked += 1
             f = c.foundations(n, lens="both")
-            fh = [x for x in f if x.startswith("Atlas") or x.startswith("Atlas")]
-            if fh:
-                leaked[n] = fh[:5]
+            leaks = [x for x in f if x.startswith("Atlas") or x.startswith("Atlas")]
+            if leaks:
+                leaked[n] = leaks[:5]
     r.check(checked > 0, f"{checked} corpus declarations walked")
     r.check(not leaked,
             f"{len(leaked)} corpus declarations rest on an atlas constant "
             f"(ADR-006 says this must be zero)")
-    for n, fh in list(leaked.items())[:8]:
-        r.note(f"    {n} rests on {', '.join(fh)}")
+    for n, leaks in list(leaked.items())[:8]:
+        r.note(f"    {n} rests on {', '.join(leaks)}")
     r.data = {"checked": checked, "leaked": leaked}
     return r
 

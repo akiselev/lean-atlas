@@ -3,11 +3,11 @@ revision = 3
 requires-python = ">=3.10"
 
 [[package]]
-name = "ferris-howard-dev"
+name = "lean-atlas-dev"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "fh-atlas" },
+    { name = "atlas" },
 ]
 
 [package.dev-dependencies]
@@ -16,14 +16,14 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "fh-atlas", directory = "crates/fh-atlas-py" }]
+requires-dist = [{ name = "atlas", directory = "crates/atlas-py" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "maturin", specifier = ">=1.7,<2.0" }]
 
 [[package]]
-name = "fh-atlas"
-source = { directory = "crates/fh-atlas-py" }
+name = "atlas"
+source = { directory = "crates/atlas-py" }
 
 [[package]]
 name = "maturin"

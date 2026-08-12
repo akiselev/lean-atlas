@@ -27,7 +27,7 @@ class Decl:        # a declaration handle (theorem/def/instance); cheap, hashabl
 class Stmt:        # a statement (elaborated, hash-carrying)
     hash: StmtHash; frozen: bool
     skeleton(self) -> Skeleton
-    render(self, target: Literal["fh","lean","latex","english"]) -> str   # emit backends, in-process
+    render(self, target: Literal["lang","lean","latex","english"]) -> str   # emit backends, in-process
     instantiate(self, **subst) -> Stmt
 
 class Term:        # elaborated term handle; DAG view
@@ -100,7 +100,7 @@ class Session:     # a managed Lean REPL subprocess bound to a Corpus
     def __init__(self, corpus: Corpus, *, workers: int = 1): ...
     def __enter__(self) -> Session; def __exit__(...) -> None
     def goal(self, s: Stmt) -> GoalState
-    def elaborate(self, src: str, *, lang: Literal["fh","lean"] = "fh") -> ElabResult
+    def elaborate(self, src: str, *, lang: Literal["lang","lean"] = "lang") -> ElabResult
     def check(self, decls: Sequence[Decl] | Path) -> CheckReport   # fresh-env; H-audit included
     def prove(self, st: GoalState, *, budget: Budget,
               portfolio: Sequence[str] | TacticPolicy = DEFAULT_PORTFOLIO,   # policy: §10.2
@@ -155,7 +155,7 @@ class Trace:
     frames: Sequence[Frame]
     def blame(self, *, method: Literal["scan","mincut"] = "mincut") -> BlameReport   # X8
 class Frame:
-    span: FhSpan; values: Mapping[str, Fraction]; enclosures: Mapping[str, Interval]
+    span: Span; values: Mapping[str, Fraction]; enclosures: Mapping[str, Interval]
     def to_lean_context(self, s: Session) -> GoalState      # REPL-is-the-debugger
     def check_watch(self, pred: str) -> bool | Interval
 ```
