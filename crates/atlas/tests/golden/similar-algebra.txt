@@ -1,0 +1,77 @@
+# le_trans
+  1.2109  tie1   ret 1.000  common  31  vars  0  [shape+subterm+shape-subterm]  LE.le.trans
+  1.1838  tie1   ret 0.903  common  28  vars  1  [shape+shape-subterm]  Setoid.trans
+  1.1806  tie1   ret 0.903  common  28  vars  1  [shape+shape-subterm]  Lean.Order.PartialOrder.rel_trans
+  1.1705  tie1   ret 0.903  common  28  vars  1  [shape+shape-subterm]  Dvd.dvd.trans
+  1.1454  tie1   ret 0.935  common  29  vars  1  [shape+subterm+shape-subterm]  lt_of_lt_of_le
+  1.1334  tie1   ret 0.935  common  29  vars  1  [shape+subterm+shape-subterm]  lt_of_le_of_lt
+  1.1195  tie1   ret 0.903  common  28  vars  1  [shape+shape-subterm]  dvd_trans
+  1.0850  tie1   ret 0.935  common  29  vars  1  [shape+subterm+shape-subterm]  LT.lt.trans_le
+  1.0748  tie1   ret 0.935  common  29  vars  1  [shape+subterm+shape-subterm]  LE.le.trans_lt
+  1.0572  tie1   ret 0.903  common  28  vars  1  [shape+shape-subterm]  lt_trans
+# dvd_trans
+  1.2606  tie1   ret 0.903  common  28  vars  2  [shape+shape-subterm]  lt_of_lt_of_le
+  1.2584  tie1   ret 0.903  common  28  vars  2  [shape+shape-subterm]  lt_of_le_of_lt
+  1.2158  tie1   ret 0.903  common  28  vars  1  [shape+shape-subterm]  lt_trans
+  1.2014  tie1   ret 0.903  common  28  vars  1  [shape+shape-subterm]  le_trans
+  1.1988  tie1   ret 1.000  common  31  vars  0  [shape+subterm+shape-subterm]  Dvd.dvd.trans
+  1.1963  tie1   ret 0.903  common  28  vars  1  [shape+shape-subterm]  LE.le.trans
+  1.1941  tie1   ret 0.903  common  28  vars  2  [shape+shape-subterm]  LT.lt.trans_le
+  1.1934  tie1   ret 0.903  common  28  vars  2  [shape+shape-subterm]  LE.le.trans_lt
+  1.1888  tie1   ret 0.903  common  28  vars  1  [shape+shape-subterm]  LT.lt.trans
+  1.1838  tie1   ret 0.903  common  28  vars  1  [shape+shape-subterm]  Setoid.trans
+# Nat.mul_comm
+  1.2417  tie1   ret 1.000  common  24  vars  0  [shape+shape-subterm]  Rat.mul_comm
+  1.1736  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  Int16.mul_comm
+  1.1736  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  Int32.mul_comm
+  1.1736  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  Int64.mul_comm
+  1.1736  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  Int8.mul_comm
+  1.1736  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  UInt16.mul_comm
+  1.1736  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  UInt32.mul_comm
+  1.1736  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  UInt64.mul_comm
+  1.1736  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  UInt8.mul_comm
+  1.1616  tie1   ret 1.000  common  24  vars  0  [shape+shape-subterm]  ISize.mul_comm
+# le_antisymm
+  1.2254  tie1   ret 0.929  common  26  vars  1  [shape+subterm+shape-subterm]  Lean.Order.PartialOrder.rel_antisymm
+  1.2066  tie1   ret 1.000  common  28  vars  0  [shape+subterm+shape-subterm]  LE.le.antisymm
+  1.0388  tie1   ret 1.000  common  28  vars  0  [shape+subterm+shape-subterm]  eq_of_le_of_ge
+  0.8247  tie1   ret 0.821  common  23  vars  4  [subterm]  lt_of_le_of_ne
+  0.8210  tie1   ret 0.857  common  24  vars  3  [subterm+shape-subterm]  IsMin.eq_of_ge
+  0.7835  tie1   ret 0.821  common  23  vars  4  [subterm]  LE.le.lt_of_ne
+  0.7637  tie2   ret 0.821  common  23  vars  4  [subterm]  Ne.lt_of_le
+  0.7637  tie2   ret 0.821  common  23  vars  4  [subterm]  lt_of_ne_of_le
+  0.7360  tie2   ret 0.821  common  23  vars  4  [subterm]  Ne.lt_of_le'
+  0.7360  tie2   ret 0.821  common  23  vars  4  [subterm]  lt_of_ne_of_le'
+# Nat.add_comm
+  1.1997  tie1   ret 1.000  common  24  vars  0  [shape+shape-subterm]  Rat.add_comm
+  1.1674  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  Int16.add_comm
+  1.1674  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  Int32.add_comm
+  1.1674  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  Int64.add_comm
+  1.1674  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  Int8.add_comm
+  1.1674  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  UInt16.add_comm
+  1.1674  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  UInt32.add_comm
+  1.1674  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  UInt64.add_comm
+  1.1674  tie8   ret 1.000  common  24  vars  0  [shape+shape-subterm]  UInt8.add_comm
+  1.1554  tie1   ret 1.000  common  24  vars  0  [shape+shape-subterm]  ISize.add_comm
+# Nat.succ_le_succ
+  1.1333  tie1   ret 0.905  common  19  vars  1  [shape+shape-subterm]  Nat.sqrt_le_sqrt
+  1.1256  tie5   ret 0.905  common  19  vars  1  [shape+shape-subterm]  ISize.toNatClampNeg_le
+  1.1256  tie5   ret 0.905  common  19  vars  1  [shape+shape-subterm]  Int16.toNatClampNeg_le
+  1.1256  tie5   ret 0.905  common  19  vars  1  [shape+shape-subterm]  Int32.toNatClampNeg_le
+  1.1256  tie5   ret 0.905  common  19  vars  1  [shape+shape-subterm]  Int64.toNatClampNeg_le
+  1.1256  tie5   ret 0.905  common  19  vars  1  [shape+shape-subterm]  Int8.toNatClampNeg_le
+  1.1153  tie1   ret 0.905  common  19  vars  1  [shape+shape-subterm]  Char.ofOrdinal_le_of_le
+  1.1056  tie1   ret 0.905  common  19  vars  1  [shape+shape-subterm]  Char.ordinal_le_of_le
+  1.0947  tie1   ret 0.905  common  19  vars  1  [shape+shape-subterm]  Int.toNat_le_toNat
+  1.0897  tie1   ret 0.905  common  19  vars  1  [shape+shape-subterm]  Bool.ofNat_le_ofNat
+# And.comm
+  1.2215  tie1   ret 1.000  common  17  vars  0  [shape+subterm+shape-subterm]  and_comm
+  1.0288  tie1   ret 0.882  common  15  vars  1  [shape+shape-subterm]  or_comm
+  0.9845  tie1   ret 0.882  common  15  vars  1  [shape+shape-subterm]  iff_comm
+  0.9017  tie1   ret 0.882  common  15  vars  1  [shape+shape-subterm]  Iff.comm
+  0.8284  tie1   ret 0.882  common  15  vars  1  [shape+shape-subterm]  Or.comm
+  0.7304  tie1   ret 0.765  common  13  vars  2  [shape-subterm]  Nat.coprime_comm
+  0.6586  tie1   ret 0.778  common  14  vars  3  [subterm]  exists_prop
+  0.6157  tie1   ret 0.667  common  12  vars  5  [subterm]  existsUnique_prop
+  0.5493  tie1   ret 0.545  common  12  vars  3  [subterm]  Prop.disjoint_iff
+  0.5148  tie1   ret 0.526  common  10  vars  3  [subterm]  iff_and_self

@@ -1,0 +1,80 @@
+# GT-C — hand-labelled, frozen. Non-identical analogy pairs (M1 D5).
+#
+# Frozen 2026-08-02, BEFORE any baseline was implemented or any number measured.
+# Every pair was checked to be (a) present in the algebra slice and (b) NOT identical
+# at `carriers` — an exact-coincidence pair belongs in GT-B and would let a ranker with
+# the anti-unifier deleted score well, which is the failure this set exists to prevent.
+#
+# Why these pairs and not others. Two adversarial reviews found that ground truths
+# derived from *names* favour a lexical ranker a priori and ones derived from *statement
+# equality* favour the structural ranker a priori — and worse, that a structure-derived
+# oracle computed by the engine's own `erase` moves together with the hypothesis when
+# `erase` is wrong. So the bulk of this set is **Mathlib's `to_additive` correspondence**:
+# a human-curated, attribute-maintained mapping between additive and multiplicative
+# theories that exists in Mathlib independently of this engine, of its erasure, and of
+# any name-similarity metric. It is the closest thing to an external oracle available
+# offline.
+#
+# The remaining families — order/divisibility, lattice duality, doubling/squaring — are
+# analogies a mathematician would name, added for degree diversity so the result is not a
+# claim about one correspondence.
+#
+# Minimum reportable size: 15 pairs. Below that, per-pair noise dominates and no recall
+# figure from this set should be published.
+#
+# AMENDMENT, 2026-08-02, after the first run and BEFORE any conclusion was drawn.
+# The freeze above excluded pairs identical at `carriers`. It did NOT exclude pairs
+# identical at `shape` — and `shape` is exactly the level the deletion control buckets on,
+# so 16 of the original 22 pairs were findable by a shape lookup with the anti-unifier
+# removed entirely. That is the same circularity two reviews caught in the first draft of
+# this experiment, one level further down: an exclusion at the wrong level is no exclusion.
+#
+# The set is therefore **stratified rather than filtered** — the shape-identical pairs are
+# still real analogies (they are Mathlib's own `to_additive` correspondence) and are kept
+# as the stratum where bucketing suffices. Only the `shape differs` stratum can separate
+# anti-unification from bucketing, and it is the one any claim about the anti-unifier must
+# rest on. Six pairs were added below to grow it; it stands at 12, which is **below the
+# 15 pre-registered above**, so results from it are reported as provisional.
+#
+# Format: left <TAB> right <TAB> family
+
+# --- additive <-> multiplicative (Mathlib's own `to_additive` correspondence) ---
+add_comm	mul_comm	to_additive
+add_assoc	mul_assoc	to_additive
+add_zero	mul_one	to_additive
+zero_add	one_mul	to_additive
+neg_neg	inv_inv	to_additive
+sub_self	div_self	to_additive
+add_left_cancel	mul_left_cancel	to_additive
+neg_add_cancel	inv_mul_cancel	to_additive
+sub_eq_add_neg	div_eq_mul_inv	to_additive
+sub_zero	div_one	to_additive
+neg_zero	inv_one	to_additive
+zero_sub	one_div	to_additive
+add_sub_cancel_right	mul_div_cancel_right	to_additive
+
+# --- order <-> divisibility (the pair the index was designed for) ---
+le_trans	dvd_trans	order_dvd
+le_refl	dvd_refl	order_dvd
+
+# --- order <-> algebra ---
+add_le_add	mul_le_mul	order_alg
+add_pos	mul_pos	order_alg
+
+# --- lattice duality ---
+min_comm	max_comm	lattice
+inf_comm	sup_comm	lattice
+inf_le_left	le_sup_left	lattice
+min_le_left	le_max_left	lattice
+
+# --- doubling <-> squaring ---
+two_mul	sq	iterate
+
+# --- added 2026-08-02 to grow the shape-differing stratum (see amendment) ---
+# Each checked to differ at BOTH `carriers` and `shape` before being added.
+abs_nonneg	sq_nonneg	nonneg
+mul_self_nonneg	sq_nonneg	nonneg
+le_add_left	dvd_mul_left	order_dvd
+add_lt_add	mul_lt_mul	order_alg
+sub_nonneg	div_le_one	order_alg
+le_max_right	min_le_right	lattice

@@ -1,0 +1,27 @@
+# The Atlas extractor — a self-contained Lean package.
+#
+# It imports **only `Lean`** — no Mathlib — and that is the property the whole
+# distribution strategy rests on. Because it has no Mathlib dependency, it compiles under
+# any Lean toolchain, so a research workspace can depend on it by path and emit the same
+# `atlas-stmt-v1` JSONL regardless of its own toolchain pin.
+#
+# That is why this is a package rather than files inside a larger workspace: an
+# extraction corpus is pinned to a specific `lean-toolchain`, and the extractor must not
+# be dragged along with that pin. Copying it into each workspace would work exactly once
+# and then drift; a path dependency cannot.
+name = "atlasExtract"
+version = "0.1.0"
+defaultTargets = ["AtlasExtract"]
+
+# The module path is `Atlas.*` and the Lean namespace inside is `Atlas`. Rooted, not
+# globbed: this package is three modules and an executable, and listing them is clearer
+# than a pattern.
+[[lean_lib]]
+name = "AtlasExtract"
+roots = ["Atlas.Statement", "Atlas.Extract", "Atlas.Home"]
+
+[[lean_exe]]
+name = "atlas_extract"
+root = "AtlasExtract"
+# `#atlas_extract` runs inside the elaborator, so the interpreter has to be available.
+supportInterpreter = true

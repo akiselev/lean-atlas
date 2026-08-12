@@ -1,0 +1,34 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "atlas"
+description = "Query an Atlas slice from Python: one load, many queries"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+dynamic = ["version"]
+
+[tool.maturin]
+module-name = "atlas"
+# One wheel per platform, every Python >=3.10 (python-api.md §1).
+features = ["pyo3/abi3-py310"]
+# `atlas.pyi` and `py.typed` beside this file are picked up by maturin on their own;
+# listing them under `include` as well puts a second, unimported copy at the wheel root.
+
+[tool.uv]
+# What makes uv rebuild this package. Without it uv keys a path dependency on its
+# `pyproject.toml` alone, so every edit to the Rust — here *or* in the engine crate this one
+# wraps — leaves `uv run` cheerfully reinstalling the wheel it built the first time. The
+# failure is silent and looks like the compiler ignoring you.
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "src/**/*.rs" },
+    { file = "../atlas/Cargo.toml" },
+    { file = "../atlas/src/**/*.rs" },
+]

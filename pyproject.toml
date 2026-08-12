@@ -1,0 +1,34 @@
+# The dev environment for this repository's Python side — `scripts/` and the Atlas
+# binding's own tests. It is not a package: nothing here is published, and `uv` is told so
+# explicitly so that `uv sync` builds the *dependencies* into `.venv` and stops.
+#
+# The one dependency is the Rust extension in `crates/fh-atlas-py`, taken from the path
+# source below rather than from an index. That is what lets `scripts/*.py` say
+# `import fh_atlas` with no `sys.path` surgery and no `PYTHONPATH`: after `uv sync` the
+# module is installed in `.venv`, which `uv run` (and a plain `. .venv/bin/activate`) puts
+# on the path the ordinary way.
+#
+#     uv sync                                   # build the extension, create .venv
+#     uv run scripts/atlas-mathlib-experiment.py
+#
+# After editing Rust, `uv sync` alone will not notice — a path dependency is only rebuilt
+# when uv is told to. Use `uv run maturin develop --release -m crates/fh-atlas-py/Cargo.toml`,
+# which is both faster than a wheel build and the loop the binding's author wants.
+
+[project]
+name = "ferris-howard-dev"
+version = "0.0.0"
+description = "Dev environment for the Ferris-Howard scripts and the Atlas Python binding"
+requires-python = ">=3.10"
+dependencies = ["fh-atlas"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+fh-atlas = { path = "crates/fh-atlas-py" }
+
+[dependency-groups]
+# `maturin develop` needs maturin *in the venv it installs into*, so it is a dev dependency
+# rather than something to install globally.
+dev = ["maturin>=1.7,<2.0"]
