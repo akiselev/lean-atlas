@@ -7,9 +7,9 @@ use std::process::ExitCode;
 
 use atlas::graph::Graph;
 use atlas::intuition::{Affordance, Experience, IntuitionIndex, MethodSpec};
-use atlas::intuition_benchmark::{run_benchmark, BenchmarkCase};
+use atlas::intuition_benchmark::{BenchmarkCase, run_benchmark};
 use atlas::intuition_concept::ConceptContext;
-use atlas::intuition_viewpoint::{explore_viewpoints, pareto_methods, ExploreOptions};
+use atlas::intuition_viewpoint::{ExploreOptions, explore_viewpoints, pareto_methods};
 
 const USAGE: &str = "\
 usage: atlas-intuition <query> <slice.jsonl> [args] [options]
@@ -58,7 +58,10 @@ fn main() -> ExitCode {
 
 fn run(args: &[String]) -> Result<String, String> {
     let options = take_options(args)?;
-    let (query, rest) = options.rest.split_first().ok_or_else(|| USAGE.to_string())?;
+    let (query, rest) = options
+        .rest
+        .split_first()
+        .ok_or_else(|| USAGE.to_string())?;
     let (path, rest) = rest.split_first().ok_or_else(|| USAGE.to_string())?;
     let input = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
     let graph = Graph::from_jsonl(&input).map_err(|e| e.to_string())?;
@@ -110,20 +113,14 @@ fn run(args: &[String]) -> Result<String, String> {
             let [decl] = rest else {
                 return Err("rank takes one declaration".into());
             };
-            render_rank(
-                &index,
-                decl,
-                experience.as_ref(),
-                options.top,
-            )
+            render_rank(&index, decl, experience.as_ref(), options.top)
         }
         "pareto" => {
             let [decl] = rest else {
                 return Err("pareto takes one declaration".into());
             };
-            let mut out = String::from(
-                "# non-dominated research moves; no scalar utility assumed\n",
-            );
+            let mut out =
+                String::from("# non-dominated research moves; no scalar utility assumed\n");
             for p in pareto_methods(&index, decl, experience.as_ref())? {
                 let c = p.candidate;
                 out.push_str(&format!(
@@ -242,9 +239,7 @@ fn run(args: &[String]) -> Result<String, String> {
                 return Err("auxiliary takes one declaration".into());
             };
             let mut out = String::new();
-            for candidate in
-                index.missing_auxiliaries(decl, experience.as_ref(), options.top)?
-            {
+            for candidate in index.missing_auxiliaries(decl, experience.as_ref(), options.top)? {
                 out.push_str(&format!(
                     "{:.3}  {}\n       {}\n",
                     candidate.score, candidate.method, candidate.object
@@ -327,7 +322,11 @@ fn run(args: &[String]) -> Result<String, String> {
                 "# FCA context: {} declarations; {} concepts{}; {} cover edges\n",
                 context.len(),
                 lattice.concepts.len(),
-                if lattice.truncated { " (truncated)" } else { "" },
+                if lattice.truncated {
+                    " (truncated)"
+                } else {
+                    ""
+                },
                 lattice.covers.len()
             );
             for (i, concept) in lattice.concepts.iter().enumerate() {
@@ -372,12 +371,7 @@ fn run(args: &[String]) -> Result<String, String> {
             if rest.is_empty() {
                 return Err("missing-cells takes one or more theory/module prefixes".into());
             }
-            let cells = ConceptContext::missing_cells(
-                &graph,
-                &index,
-                rest,
-                options.min_global,
-            );
+            let cells = ConceptContext::missing_cells(&graph, &index, rest, options.min_global);
             let mut out = String::from(
                 "# structural absences only; a missing cell becomes a research question only with independent neighborhood/alignment evidence\n",
             );
@@ -396,8 +390,8 @@ fn run(args: &[String]) -> Result<String, String> {
             let [cases_path] = rest else {
                 return Err("benchmark takes one answer-key JSONL path".into());
             };
-            let cases_text = std::fs::read_to_string(cases_path)
-                .map_err(|e| format!("{cases_path}: {e}"))?;
+            let cases_text =
+                std::fs::read_to_string(cases_path).map_err(|e| format!("{cases_path}: {e}"))?;
             let cases = BenchmarkCase::from_jsonl(&cases_text)?;
             let report = run_benchmark(&index, &cases, experience.as_ref())?;
             let mut out = format!(
@@ -418,10 +412,7 @@ fn run(args: &[String]) -> Result<String, String> {
                         .unwrap_or_else(|| "none".to_string()),
                     result.expected_methods.join(", ")
                 ));
-                out.push_str(&format!(
-                    "      top [{}]\n",
-                    result.top_methods.join(", ")
-                ));
+                out.push_str(&format!("      top [{}]\n", result.top_methods.join(", ")));
             }
             Ok(out)
         }
@@ -530,11 +521,7 @@ fn take_options(args: &[String]) -> Result<Options, String> {
                     .map_err(|_| format!("`{value}` is not a number"))?;
             }
             "--experience" => {
-                experience_path = Some(
-                    it.next()
-                        .ok_or("--experience takes a JSONL path")?
-                        .clone(),
-                );
+                experience_path = Some(it.next().ok_or("--experience takes a JSONL path")?.clone());
             }
             "--depth" => {
                 let value = it.next().ok_or("--depth takes a number")?;

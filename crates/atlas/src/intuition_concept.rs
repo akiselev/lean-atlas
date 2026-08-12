@@ -5,51 +5,10 @@
 //! make an affordance implication a theorem of mathematics; it is a corpus-level regularity
 //! that should be tested on held-out theories and, where meaningful, formalized/refuted.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use crate::graph::Graph;
 use crate::intuition::{Affordance, IntuitionIndex};
-
-pub const ALL_AFFORDANCES: [Affordance; 36] = [
-    Affordance::Algebraic,
-    Affordance::Analytic,
-    Affordance::Categorical,
-    Affordance::Combinatorial,
-    Affordance::Conservation,
-    Affordance::Continuous,
-    Affordance::Convolution,
-    Affordance::Differential,
-    Affordance::Discrete,
-    Affordance::Dynamical,
-    Affordance::Entropic,
-    Affordance::Equality,
-    Affordance::Equivalence,
-    Affordance::Finite,
-    Affordance::Geometric,
-    Affordance::InnerProduct,
-    Affordance::Integral,
-    Affordance::LimitAsymptotic,
-    Affordance::Linear,
-    Affordance::Locality,
-    Affordance::Measure,
-    Affordance::Metric,
-    Affordance::Normed,
-    Affordance::Operator,
-    Affordance::Optimization,
-    Affordance::Order,
-    Affordance::Polynomial,
-    Affordance::Positivity,
-    Affordance::Probabilistic,
-    Affordance::Quotient,
-    Affordance::Scaling,
-    Affordance::Spectral,
-    Affordance::Symmetry,
-    Affordance::Topological,
-    Affordance::Variational,
-    // Keep one spare semantic axis explicit rather than changing bit assignments later.
-    // Equality of this array length is tested; adding an affordance must update the codec.
-    Affordance::Algebraic,
-];
 
 /// One exact formal concept in the current extracted context.
 #[derive(Clone, Debug, PartialEq, Eq)]
