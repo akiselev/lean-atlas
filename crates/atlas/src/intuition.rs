@@ -304,7 +304,13 @@ pub fn method_catalog() -> Vec<MethodSpec> {
             id: "tropicalize",
             label: "pass from algebraic/asymptotic data to piecewise-linear combinatorics",
             family: "asymptotic-geometry",
-            recognizes: vec![Algebraic, Polynomial, Scaling, LimitAsymptotic, Optimization],
+            recognizes: vec![
+                Algebraic,
+                Polynomial,
+                Scaling,
+                LimitAsymptotic,
+                Optimization,
+            ],
             native: vec![Algebraic, Geometric],
             unlocks: vec![Combinatorial, Geometric, Discrete],
             auxiliary: Some("a valuation/scaling map producing a tropical object"),
@@ -455,7 +461,14 @@ pub fn method_catalog() -> Vec<MethodSpec> {
             id: "large-parameter-limit",
             label: "study an extreme parameter regime where structure simplifies",
             family: "toy-world",
-            recognizes: vec![Finite, Discrete, Dynamical, Probabilistic, Scaling, Algebraic],
+            recognizes: vec![
+                Finite,
+                Discrete,
+                Dynamical,
+                Probabilistic,
+                Scaling,
+                Algebraic,
+            ],
             native: vec![LimitAsymptotic, Scaling],
             unlocks: vec![LimitAsymptotic, Scaling, Continuous],
             auxiliary: Some("a one-parameter family plus an asymptotic comparison map"),
@@ -599,8 +612,8 @@ impl Experience {
             if line.is_empty() {
                 continue;
             }
-            let obj = crate::json::parse(line)
-                .map_err(|e| format!("experience line {}: {e}", i + 1))?;
+            let obj =
+                crate::json::parse(line).map_err(|e| format!("experience line {}: {e}", i + 1))?;
             let get = |k: &str| obj.get(k).and_then(|v| v.as_str());
             let problem = get("problem")
                 .ok_or_else(|| format!("experience line {} has no `problem`", i + 1))?;
@@ -879,12 +892,7 @@ impl IntuitionIndex {
                 unlocks: c.method.unlocks.clone(),
                 breadth_gain: c.breadth_gain,
                 auxiliary: c.method.auxiliary.map(str::to_string),
-                obligations: c
-                    .method
-                    .obligations
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
+                obligations: c.method.obligations.iter().map(|s| s.to_string()).collect(),
                 losses: c.method.losses.iter().map(|s| s.to_string()).collect(),
                 prior_attempts: c.prior_attempts,
             })
@@ -905,12 +913,7 @@ impl IntuitionIndex {
                     method: c.method.id.to_string(),
                     object: object.to_string(),
                     score: c.score,
-                    obligations: c
-                        .method
-                        .obligations
-                        .iter()
-                        .map(|s| s.to_string())
-                        .collect(),
+                    obligations: c.method.obligations.iter().map(|s| s.to_string()).collect(),
                 })
             })
             .take(top)
@@ -967,11 +970,7 @@ impl IntuitionIndex {
         out
     }
 
-    fn directed_bridges(
-        &self,
-        from: &TheoryProfile,
-        to: &TheoryProfile,
-    ) -> Vec<BridgeCandidate> {
+    fn directed_bridges(&self, from: &TheoryProfile, to: &TheoryProfile) -> Vec<BridgeCandidate> {
         let source = from.affordances();
         let target = to.affordances();
         let shared: Vec<Affordance> = source.intersection(&target).copied().collect();
@@ -1047,31 +1046,59 @@ fn classify_affordances(symbols: &BTreeSet<String>) -> BTreeMap<Affordance, Vec<
         };
         if has(
             &lower,
-            &["ring", "field", "semiring", "monoid", "group", "algebra", "ideal", "module"],
+            &[
+                "ring", "field", "semiring", "monoid", "group", "algebra", "ideal", "module",
+            ],
         ) {
             mark(Affordance::Algebraic);
         }
         if has(
             &lower,
-            &["analytic", "complex", "realanalytic", "holomorph", "series", "tendsto"],
+            &[
+                "analytic",
+                "complex",
+                "realanalytic",
+                "holomorph",
+                "series",
+                "tendsto",
+            ],
         ) {
             mark(Affordance::Analytic);
         }
         if has(
             &lower,
-            &["category", "functor", "naturaltransformation", "yoneda", "adjunction"],
+            &[
+                "category",
+                "functor",
+                "naturaltransformation",
+                "yoneda",
+                "adjunction",
+            ],
         ) {
             mark(Affordance::Categorical);
         }
         if has(
             &lower,
-            &["finset", "fintype", "card", "choose", "simplegraph", "multiset", "permutation"],
+            &[
+                "finset",
+                "fintype",
+                "card",
+                "choose",
+                "simplegraph",
+                "multiset",
+                "permutation",
+            ],
         ) {
             mark(Affordance::Combinatorial);
         }
         if has(
             &lower,
-            &["conserved", "conservation", "invariantquantity", "firstintegral"],
+            &[
+                "conserved",
+                "conservation",
+                "invariantquantity",
+                "firstintegral",
+            ],
         ) {
             mark(Affordance::Conservation);
         }
@@ -1083,7 +1110,16 @@ fn classify_affordances(symbols: &BTreeSet<String>) -> BTreeMap<Affordance, Vec<
         }
         if has(
             &lower,
-            &["deriv", "differential", "gradient", "laplace", "curl", "divergence", "jacobian", "hessian"],
+            &[
+                "deriv",
+                "differential",
+                "gradient",
+                "laplace",
+                "curl",
+                "divergence",
+                "jacobian",
+                "hessian",
+            ],
         ) {
             mark(Affordance::Differential);
         }
@@ -1095,7 +1131,16 @@ fn classify_affordances(symbols: &BTreeSet<String>) -> BTreeMap<Affordance, Vec<
         }
         if has(
             &lower,
-            &["flow", "trajectory", "dynamics", "evolution", "semigroup", "time", "ode", "iterate"],
+            &[
+                "flow",
+                "trajectory",
+                "dynamics",
+                "evolution",
+                "semigroup",
+                "time",
+                "ode",
+                "iterate",
+            ],
         ) {
             mark(Affordance::Dynamical);
         }
@@ -1110,7 +1155,14 @@ fn classify_affordances(symbols: &BTreeSet<String>) -> BTreeMap<Affordance, Vec<
         }
         if has(
             &lower,
-            &["iff", "equiv", "isomorph", "homeomorph", "linearequiv", "ringequiv"],
+            &[
+                "iff",
+                "equiv",
+                "isomorph",
+                "homeomorph",
+                "linearequiv",
+                "ringequiv",
+            ],
         ) {
             mark(Affordance::Equivalence);
         }
@@ -1119,25 +1171,54 @@ fn classify_affordances(symbols: &BTreeSet<String>) -> BTreeMap<Affordance, Vec<
         }
         if has(
             &lower,
-            &["geometry", "geometric", "manifold", "affine", "euclidean", "lorentz", "scheme", "variety", "vectorbundle"],
+            &[
+                "geometry",
+                "geometric",
+                "manifold",
+                "affine",
+                "euclidean",
+                "lorentz",
+                "scheme",
+                "variety",
+                "vectorbundle",
+            ],
         ) {
             mark(Affordance::Geometric);
         }
         if has(
             &lower,
-            &["innerproduct", "inner", "orthogon", "hilbert", "sesquilinear"],
+            &[
+                "innerproduct",
+                "inner",
+                "orthogon",
+                "hilbert",
+                "sesquilinear",
+            ],
         ) {
             mark(Affordance::InnerProduct);
         }
         if has(
             &lower,
-            &["integral", "integrable", "measureintegral", "intervalintegral"],
+            &[
+                "integral",
+                "integrable",
+                "measureintegral",
+                "intervalintegral",
+            ],
         ) {
             mark(Affordance::Integral);
         }
         if has(
             &lower,
-            &["tendsto", "limit", "asympt", "littleo", "bigo", "filter.at", "eventually"],
+            &[
+                "tendsto",
+                "limit",
+                "asympt",
+                "littleo",
+                "bigo",
+                "filter.at",
+                "eventually",
+            ],
         ) {
             mark(Affordance::LimitAsymptotic);
         }
@@ -1146,13 +1227,25 @@ fn classify_affordances(symbols: &BTreeSet<String>) -> BTreeMap<Affordance, Vec<
         }
         if has(
             &lower,
-            &["local", "compact_support", "finite_range", "neighborhood", "nhds"],
+            &[
+                "local",
+                "compact_support",
+                "finite_range",
+                "neighborhood",
+                "nhds",
+            ],
         ) {
             mark(Affordance::Locality);
         }
         if has(
             &lower,
-            &["measure", "volume", "haar", "probabilitymeasure", "integral"],
+            &[
+                "measure",
+                "volume",
+                "haar",
+                "probabilitymeasure",
+                "integral",
+            ],
         ) {
             mark(Affordance::Measure);
         }
@@ -1164,19 +1257,36 @@ fn classify_affordances(symbols: &BTreeSet<String>) -> BTreeMap<Affordance, Vec<
         }
         if has(
             &lower,
-            &["operator", "continuouslinearmap", "linearoperator", "module.end", "endomorph", "matrix"],
+            &[
+                "operator",
+                "continuouslinearmap",
+                "linearoperator",
+                "module.end",
+                "endomorph",
+                "matrix",
+            ],
         ) {
             mark(Affordance::Operator);
         }
         if has(
             &lower,
-            &["argmin", "argmax", "minim", "maxim", "optimal", "convex", "concave"],
+            &[
+                "argmin", "argmax", "minim", "maxim", "optimal", "convex", "concave",
+            ],
         ) {
             mark(Affordance::Optimization);
         }
         if has(
             &lower,
-            &["le.le", "lt.lt", "partialorder", "linearorder", "sup", "inf", "monotone"],
+            &[
+                "le.le",
+                "lt.lt",
+                "partialorder",
+                "linearorder",
+                "sup",
+                "inf",
+                "monotone",
+            ],
         ) {
             mark(Affordance::Order);
         }
@@ -1188,13 +1298,28 @@ fn classify_affordances(symbols: &BTreeSet<String>) -> BTreeMap<Affordance, Vec<
         }
         if has(
             &lower,
-            &["nonneg", "positive", "positiv", "psd", "semidefinite", "sq_nonneg"],
+            &[
+                "nonneg",
+                "positive",
+                "positiv",
+                "psd",
+                "semidefinite",
+                "sq_nonneg",
+            ],
         ) {
             mark(Affordance::Positivity);
         }
         if has(
             &lower,
-            &["probability", "random", "distribution", "expectation", "independent", "markov", "stochastic"],
+            &[
+                "probability",
+                "random",
+                "distribution",
+                "expectation",
+                "independent",
+                "markov",
+                "stochastic",
+            ],
         ) {
             mark(Affordance::Probabilistic);
         }
@@ -1203,31 +1328,72 @@ fn classify_affordances(symbols: &BTreeSet<String>) -> BTreeMap<Affordance, Vec<
         }
         if has(
             &lower,
-            &["scale", "scaling", "homogeneous", "degree", "dilation", "renormal"],
+            &[
+                "scale",
+                "scaling",
+                "homogeneous",
+                "degree",
+                "dilation",
+                "renormal",
+            ],
         ) {
             mark(Affordance::Scaling);
         }
         if has(
             &lower,
-            &["spectrum", "eigen", "eigenspace", "resolvent", "selfadjoint", "spectral", "trace"],
+            &[
+                "spectrum",
+                "eigen",
+                "eigenspace",
+                "resolvent",
+                "selfadjoint",
+                "spectral",
+                "trace",
+            ],
         ) {
             mark(Affordance::Spectral);
         }
         if has(
             &lower,
-            &["mulaction", "addaction", "groupaction", "equivariant", "invariant", "symmetry", "representation"],
+            &[
+                "mulaction",
+                "addaction",
+                "groupaction",
+                "equivariant",
+                "invariant",
+                "symmetry",
+                "representation",
+            ],
         ) {
             mark(Affordance::Symmetry);
         }
         if has(
             &lower,
-            &["topolog", "continuous", "compact", "connected", "homotopy", "homology", "cohomology", "homeomorph"],
+            &[
+                "topolog",
+                "continuous",
+                "compact",
+                "connected",
+                "homotopy",
+                "homology",
+                "cohomology",
+                "homeomorph",
+            ],
         ) {
             mark(Affordance::Topological);
         }
         if has(
             &lower,
-            &["energy", "action", "lagrang", "hamilton", "variational", "euler_lagrange", "lyapunov", "functional"],
+            &[
+                "energy",
+                "action",
+                "lagrang",
+                "hamilton",
+                "variational",
+                "euler_lagrange",
+                "lyapunov",
+                "functional",
+            ],
         ) {
             mark(Affordance::Variational);
         }
@@ -1405,7 +1571,11 @@ mod tests {
     fn bridge_search_asks_for_language_transfer_not_statement_similarity() {
         let input = [
             row("Alg.foo", "Alg", &["CommRing", "Polynomial", "MulAction"]),
-            row("Geo.bar", "Geo", &["Manifold", "TopologicalSpace", "Quotient"]),
+            row(
+                "Geo.bar",
+                "Geo",
+                &["Manifold", "TopologicalSpace", "Quotient"],
+            ),
         ]
         .join("\n");
         let g = Graph::from_jsonl(&input).unwrap();

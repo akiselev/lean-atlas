@@ -71,7 +71,12 @@ fn run(args: &[String]) -> Result<String, String> {
                     "{:<18} {:>3}  {}\n",
                     a.name(),
                     evidence.len(),
-                    evidence.iter().take(6).cloned().collect::<Vec<_>>().join(", ")
+                    evidence
+                        .iter()
+                        .take(6)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ));
             }
             Ok(out)
@@ -82,10 +87,7 @@ fn run(args: &[String]) -> Result<String, String> {
             }
             let mut out = String::new();
             for m in idx.methods() {
-                out.push_str(&format!(
-                    "{:<22} {:<20} {}\n",
-                    m.id, m.family, m.label
-                ));
+                out.push_str(&format!("{:<22} {:<20} {}\n", m.id, m.family, m.label));
             }
             Ok(out)
         }
@@ -183,7 +185,10 @@ fn run(args: &[String]) -> Result<String, String> {
             };
             let mut out = String::new();
             for a in idx.missing_auxiliaries(decl, experience.as_ref(), top)? {
-                out.push_str(&format!("{:.3}  {}\n       {}\n", a.score, a.method, a.object));
+                out.push_str(&format!(
+                    "{:.3}  {}\n       {}\n",
+                    a.score, a.method, a.object
+                ));
                 for obligation in a.obligations {
                     out.push_str(&format!("       obligation: {obligation}\n"));
                 }
@@ -228,14 +233,14 @@ fn run(args: &[String]) -> Result<String, String> {
             };
             let mut out = String::new();
             for p in idx.toy_worlds(decl, experience.as_ref(), top)? {
-                out.push_str(&format!(
-                    "{:.3}  {:<22} {}\n",
-                    p.score, p.method, p.label
-                ));
+                out.push_str(&format!("{:.3}  {:<22} {}\n", p.score, p.method, p.label));
                 if let Some(aux) = p.auxiliary {
                     out.push_str(&format!("       model: {aux}\n"));
                 }
-                out.push_str(&format!("       must preserve: {}\n", p.obligations.join("; ")));
+                out.push_str(&format!(
+                    "       must preserve: {}\n",
+                    p.obligations.join("; ")
+                ));
                 out.push_str(&format!("       known loss: {}\n", p.losses.join("; ")));
             }
             Ok(out)
@@ -244,9 +249,9 @@ fn run(args: &[String]) -> Result<String, String> {
             if !rest.is_empty() {
                 return Err("dream takes no arguments after the slice".into());
             }
-            let experience = experience.as_ref().ok_or(
-                "dream needs --experience with ordered records carrying `step`",
-            )?;
+            let experience = experience
+                .as_ref()
+                .ok_or("dream needs --experience with ordered records carrying `step`")?;
             let mut out = String::from(
                 "# recurrent research-action motifs; candidates for later MDL/grammar promotion\n",
             );
@@ -292,11 +297,7 @@ fn take_options(args: &[String]) -> Result<Options, String> {
                 top = v.parse().map_err(|_| format!("`{v}` is not a number"))?;
             }
             "--experience" => {
-                experience_path = Some(
-                    it.next()
-                        .ok_or("--experience takes a JSONL path")?
-                        .clone(),
-                );
+                experience_path = Some(it.next().ok_or("--experience takes a JSONL path")?.clone());
             }
             "--help" | "-h" => return Err(USAGE.to_string()),
             _ => rest.push(a.clone()),
