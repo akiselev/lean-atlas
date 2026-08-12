@@ -218,7 +218,11 @@ impl ConceptContext {
     /// Exact corpus implications with singleton and optionally pair antecedents. This is
     /// not advertised as the Duquenne–Guigues canonical basis; the restricted antecedent
     /// size is deliberate so the output remains legible and scalable.
-    pub fn implications(&self, max_antecedent: usize, min_support: usize) -> Vec<ObservedImplication> {
+    pub fn implications(
+        &self,
+        max_antecedent: usize,
+        min_support: usize,
+    ) -> Vec<ObservedImplication> {
         let attrs = unique_affordances();
         let mut seeds = Vec::new();
         for i in 0..attrs.len() {
@@ -403,9 +407,10 @@ fn cover_edges(masks: &[u64]) -> Vec<(usize, usize)> {
                 continue;
             }
             // a ⊂ b. It is a cover if there is no c strictly between them.
-            let between = masks.iter().enumerate().any(|(k, &c)| {
-                k != i && k != j && c != a && c != b && a & c == a && c & b == c
-            });
+            let between = masks
+                .iter()
+                .enumerate()
+                .any(|(k, &c)| k != i && k != j && c != a && c != b && a & c == a && c & b == c);
             if !between {
                 edges.push((i, j));
             }
@@ -470,11 +475,7 @@ mod tests {
         let ctx = ConceptContext::build(&g, &idx, None);
         let lattice = ctx.concepts(100);
         assert!(!lattice.concepts.is_empty());
-        let intents: BTreeSet<_> = lattice
-            .concepts
-            .iter()
-            .map(|c| c.intent.clone())
-            .collect();
+        let intents: BTreeSet<_> = lattice.concepts.iter().map(|c| c.intent.clone()).collect();
         assert_eq!(intents.len(), lattice.concepts.len());
     }
 
@@ -489,12 +490,8 @@ mod tests {
         .join("\n");
         let g = Graph::from_jsonl(&input).unwrap();
         let idx = IntuitionIndex::build(&g);
-        let cells = ConceptContext::missing_cells(
-            &g,
-            &idx,
-            &["A".to_string(), "B".to_string()],
-            0.25,
-        );
+        let cells =
+            ConceptContext::missing_cells(&g, &idx, &["A".to_string(), "B".to_string()], 0.25);
         assert!(cells.iter().any(|c| {
             c.theory == "A" && c.affordance == Affordance::Geometric && c.local_support == 0
         }));

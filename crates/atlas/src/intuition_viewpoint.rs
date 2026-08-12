@@ -270,10 +270,8 @@ pub fn explore_viewpoints(
                         &parent_obligations,
                         proposal.method.obligations.iter().copied(),
                     );
-                    child.losses = append_many(
-                        &parent_losses,
-                        proposal.method.losses.iter().copied(),
-                    );
+                    child.losses =
+                        append_many(&parent_losses, proposal.method.losses.iter().copied());
                 }
                 existing
             } else {
@@ -418,12 +416,7 @@ mod tests {
     }
 
     fn graph() -> Graph {
-        let statement = stmt(&[
-            "ContinuousLinearMap",
-            "deriv",
-            "Flow",
-            "InnerProductSpace",
-        ]);
+        let statement = stmt(&["ContinuousLinearMap", "deriv", "Flow", "InnerProductSpace"]);
         Graph::from_jsonl(&format!(
             "{{\"name\":\"P\",\"kind\":\"theorem\",\"module\":\"Dynamics\",\"stmt\":\"{statement}\",\"uses_statement\":[],\"uses_proof\":[]}}"
         ))
@@ -455,8 +448,7 @@ mod tests {
     fn viewpoint_paths_accumulate_obligations_and_losses() {
         let graph = graph();
         let index = IntuitionIndex::build(&graph);
-        let viewpoints =
-            explore_viewpoints(&index, "P", None, &ExploreOptions::default()).unwrap();
+        let viewpoints = explore_viewpoints(&index, "P", None, &ExploreOptions::default()).unwrap();
         let child = viewpoints
             .nodes
             .iter()

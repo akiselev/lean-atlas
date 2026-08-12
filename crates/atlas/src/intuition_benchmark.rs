@@ -54,13 +54,9 @@ impl BenchmarkCase {
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            let obj = crate::json::parse(line)
-                .map_err(|e| format!("benchmark line {}: {e}", i + 1))?;
-            let string = |key: &str| {
-                obj.get(key)
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string)
-            };
+            let obj =
+                crate::json::parse(line).map_err(|e| format!("benchmark line {}: {e}", i + 1))?;
+            let string = |key: &str| obj.get(key).and_then(|v| v.as_str()).map(str::to_string);
             let list = |key: &str| -> Vec<String> {
                 obj.get(key)
                     .and_then(|v| v.as_list())
@@ -72,8 +68,7 @@ impl BenchmarkCase {
                     })
                     .unwrap_or_default()
             };
-            let id = string("id")
-                .ok_or_else(|| format!("benchmark line {} has no `id`", i + 1))?;
+            let id = string("id").ok_or_else(|| format!("benchmark line {} has no `id`", i + 1))?;
             let problem = string("problem")
                 .ok_or_else(|| format!("benchmark line {} has no `problem`", i + 1))?;
             let expected_methods = list("expected_methods");
