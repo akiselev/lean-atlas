@@ -328,6 +328,35 @@ def an_unusable_statement_says_which_declaration_and_why(corpus: fa.Corpus, slic
         fixture.unlink()
 
 
+def v2_schema_preserves_roles_requirements_and_legacy_unknowns(
+    corpus: fa.Corpus, slice_path: str
+) -> None:
+    fixture = pathlib.Path("/tmp/atlas-v2-schema.jsonl")
+    fixture.write_text(
+        '{"schema":"atlas-row-v2","name":"Current","kind":"theorem","module":"M",'
+        '"is_instance":false,"stmt":"atlas-stmt-v1;b0",'
+        '"requirements_statement":[{"source":"LT.lt","class":"LT","carrier":0}],'
+        '"uses_statement":[],"uses_proof":[]}\n'
+        '{"name":"Legacy","kind":"theorem","module":"M",'
+        '"stmt":"atlas-stmt-v1;b0","uses_statement":[],"uses_proof":[]}\n'
+    )
+    try:
+        c = fa.Corpus.load(fixture)
+        current = c.get("Current")
+        assert current is not None
+        assert current.schema == "atlas-row-v2"
+        assert current.is_instance is False
+        assert current.requirements_statement == [("LT.lt", "LT", 0)]
+
+        legacy = c.get("Legacy")
+        assert legacy is not None
+        assert legacy.schema == "legacy"
+        assert legacy.is_instance is None
+        assert legacy.requirements_statement is None
+    finally:
+        fixture.unlink()
+
+
 def the_stubs_describe_the_module_that_shipped(corpus: fa.Corpus, slice_path: str) -> None:
     # Agents lean on stubs harder than humans do (python-api.md §2), so a stub that has
     # drifted from the extension is worse than no stub: it is a confident wrong answer.
@@ -425,6 +454,7 @@ CLAIMS = [
     a_bad_level_names_the_levels_that_exist,
     an_unknown_declaration_says_so_rather_than_returning_nothing,
     an_unusable_statement_says_which_declaration_and_why,
+    v2_schema_preserves_roles_requirements_and_legacy_unknowns,
     the_stubs_describe_the_module_that_shipped,
     a_missing_or_broken_slice_raises_before_any_query,
     one_load_answers_twenty_questions_for_less_than_one_cli_call,

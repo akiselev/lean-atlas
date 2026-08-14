@@ -773,16 +773,14 @@ impl SkeletonIndex {
                 line: i + 1,
                 reason,
             })?;
-            let Some(name) = v.get("name").and_then(|s| s.as_str()) else {
-                return Err(GraphError::BadRow {
-                    line: i + 1,
-                    reason: "row has no `name`".into(),
-                });
-            };
+            let row = crate::graph::parse_row_value(&v).map_err(|reason| GraphError::BadRow {
+                line: i + 1,
+                reason,
+            })?;
             // A row whose statement could not be encoded is kept by B1 and skipped here:
             // it has no term to index, and dropping it silently would be worse than
             // saying so.
-            let Some(stmt) = v.get("stmt").and_then(|s| s.as_str()) else {
+            let Some(stmt) = row.stmt.as_deref() else {
                 continue;
             };
             let Ok(t) = arena.parse(stmt) else { continue };
@@ -794,31 +792,12 @@ impl SkeletonIndex {
             } else {
                 t
             };
-            let sym = arena.intern_sym(name);
+            let sym = arena.intern_sym(&row.name);
             sig_rows.push((sym, t));
-            names.push(name.to_string());
-            modules.push(
-                v.get("module")
-                    .and_then(|s| s.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-            );
-            kinds.push(
-                v.get("kind")
-                    .and_then(|s| s.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-            );
-            proofs.push(
-                v.get("uses_proof")
-                    .and_then(|a| a.as_list())
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|x| x.as_str().map(str::to_string))
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default(),
-            );
+            names.push(row.name);
+            modules.push(row.module);
+            kinds.push(row.kind);
+            proofs.push(row.uses_proof);
             roots.push(t);
         }
 

@@ -158,12 +158,17 @@ pub struct DictOptions {
     pub max_per_right: Option<usize>,
     /// Final name components treated as administrative rather than mathematical.
     ///
-    /// The worst collision target on the first run was `instReflDvd_mathlib`, claimed by
-    /// fourteen lefts — a typeclass instance whose extracted `kind` is `"theorem"`, so
-    /// `theorems_only` cannot see it. B1 emits no `is_instance`, so this is a **name
-    /// heuristic and is reported as one**: it caught 6.9% of rows on the first slice, and
-    /// a principled fix needs a field the extractor does not yet have.
+    /// This remains available for roles not yet represented by authoritative metadata and
+    /// for comparison with old measured runs. Registered instances should use
+    /// [`DictOptions::exclude_instances`], not an `inst*` name pattern.
     pub exclude_roles: Vec<String>,
+    /// Drop declarations Lean reports as registered instances, even when their extracted
+    /// `kind` is `"theorem"`.
+    ///
+    /// Requires the row graph because it owns the complete extractor metadata. Legacy
+    /// rows whose instance status is unknown are retained: absence of metadata is not
+    /// evidence that the declaration is an instance.
+    pub exclude_instances: bool,
     /// Order candidates and rows by `retention` instead of by the full score.
     ///
     /// Off by default because `Row::score`'s caveat still holds within one theory:
@@ -216,6 +221,7 @@ impl Default for DictOptions {
             max_per_right: None,
             exclude_subprefix: Vec::new(),
             exclude_roles: Vec::new(),
+            exclude_instances: false,
             rank_by_retention: false,
             per_decl_keep_displaced: false,
             exclude_cited: false,
@@ -233,6 +239,10 @@ fn excluded_role(name: &str, roles: &[String]) -> bool {
             last == r
         }
     })
+}
+
+fn is_registered_instance(g: &Graph, name: &str) -> bool {
+    g.get(name).and_then(|d| d.is_instance) == Some(true)
 }
 
 /// Frontier's citation notion, applied to one ordered pair: does `from`'s statement or
@@ -253,11 +263,9 @@ fn cites_directly(g: &Graph, from: &str, to: &str) -> bool {
 /// *recursors* (`Compl.rec ~ Star.rec`) is a fact about how Lean compiles inductive types,
 /// not a structure-preserving map between theories.
 ///
-/// `graph` is only consulted when `opts.exclude_cited` asks for it; every other option
-/// works with `None`. Asking for the citation filter without a graph panics rather than
-/// silently keeping the citation-linked rows — a filter that quietly does nothing is
-/// indistinguishable from a clean result, which is the failure mode §5's traps keep
-/// documenting.
+/// `graph` is consulted by filters whose evidence lives in the complete extractor row:
+/// `exclude_cited` and `exclude_instances`. Asking for either without a graph panics rather
+/// than silently retaining rows the caller asked to remove.
 pub fn dictionary(
     idx: &mut SkeletonIndex,
     graph: Option<&Graph>,
@@ -267,8 +275,8 @@ pub fn dictionary(
     opts: &DictOptions,
 ) -> Dictionary {
     assert!(
-        graph.is_some() || !opts.exclude_cited,
-        "exclude_cited needs the citation graph: pass `Some(&graph)` to `dictionary`"
+        graph.is_some() || (!opts.exclude_cited && !opts.exclude_instances),
+        "exclude_cited/exclude_instances need the row graph: pass `Some(&graph)` to `dictionary`"
     );
     let (per_decl, theorems_only) = (opts.per_decl, opts.theorems_only);
     // Retrieval itself is restricted to the target theory, so the pool is candidates that
@@ -290,6 +298,9 @@ pub fn dictionary(
         .iter()
         .filter(|n| idx.module_of(n).is_some_and(|m| in_theory(m, left)))
         .filter(|n| !theorems_only || idx.is_theorem(n))
+        .filter(|n| {
+            !opts.exclude_instances || !is_registered_instance(graph.expect("asserted at entry"), n)
+        })
         .cloned()
         .collect();
 
@@ -332,6 +343,11 @@ pub fn dictionary(
                 continue;
             }
             if excluded_role(&n.name, &opts.exclude_roles) {
+                continue;
+            }
+            if opts.exclude_instances
+                && is_registered_instance(graph.expect("asserted at entry"), &n.name)
+            {
                 continue;
             }
             // Filtered here, before slot accounting, so a citation-linked candidate frees
@@ -420,6 +436,9 @@ pub fn dictionary(
         .iter()
         .filter(|n| idx.module_of(n).is_some_and(|m| in_theory(m, right)))
         .filter(|n| !theorems_only || idx.is_theorem(n))
+        .filter(|n| {
+            !opts.exclude_instances || !is_registered_instance(graph.expect("asserted at entry"), n)
+        })
         .cloned()
         .collect();
     // By `score`, not by `retention`. `Row::score`'s own doc comment already says why —
@@ -1299,6 +1318,14 @@ mod assembly_tests {
         )
     }
 
+    fn v2_row_json(name: &str, module: &str, stmt: &str, is_instance: bool) -> String {
+        format!(
+            "{{\"schema\":\"atlas-row-v2\",\"name\":\"{name}\",\"kind\":\"theorem\",\"module\":\"{module}\",\
+             \"is_instance\":{is_instance},\"stmt\":\"atlas-stmt-v1;{stmt}\",\
+             \"requirements_statement\":[],\"uses_statement\":[],\"uses_proof\":[]}}"
+        )
+    }
+
     fn rights_of(d: &Dictionary, left: &str) -> Vec<String> {
         d.rows
             .iter()
@@ -1543,10 +1570,58 @@ mod assembly_tests {
         );
     }
 
+    #[test]
+    fn exclude_instances_uses_registry_metadata_not_names() {
+        let corpus = [
+            v2_row_json("l5", "L", &format!("a(a(c(2:Eq,0),{SH}),c(1:u,0))"), false),
+            v2_row_json(
+                "ordinaryName",
+                "R",
+                &format!("a(a(c(2:Eq,0),{SH}),c(1:v,0))"),
+                true,
+            ),
+            v2_row_json(
+                "instLooksLikeOne",
+                "R",
+                &format!("a(a(c(2:Eq,0),{SH}),c(1:w,0))"),
+                false,
+            ),
+            // Untagged legacy metadata stays unknown and therefore cannot be excluded by
+            // an authoritative registry filter, even when its name looks suggestive.
+            row_json(
+                "instLegacyUnknown",
+                "R",
+                &format!("a(a(c(2:Eq,0),{SH}),c(1:x,0))"),
+                &[],
+                &[],
+            ),
+        ]
+        .join("\n");
+        let cfg = IndexConfig::default();
+        let mut idx = SkeletonIndex::build(&corpus, &cfg).expect("build");
+        let graph = Graph::from_jsonl(&corpus).expect("graph");
+        let d = dictionary(
+            &mut idx,
+            Some(&graph),
+            "L",
+            "R",
+            &cfg,
+            &DictOptions {
+                per_decl: 10,
+                exclude_instances: true,
+                ..DictOptions::default()
+            },
+        );
+        let rights = rights_of(&d, "l5");
+        assert!(!rights.contains(&"ordinaryName".to_string()));
+        assert!(rights.contains(&"instLooksLikeOne".to_string()));
+        assert!(rights.contains(&"instLegacyUnknown".to_string()));
+    }
+
     /// A filter that silently does nothing is indistinguishable from a clean result, so
     /// asking for the citation filter without a citation graph is refused outright.
     #[test]
-    #[should_panic(expected = "exclude_cited needs the citation graph")]
+    #[should_panic(expected = "exclude_cited/exclude_instances need the row graph")]
     fn exclude_cited_without_a_graph_refuses_rather_than_silently_keeping_rows() {
         let corpus = row_json(
             "l4",
@@ -1565,6 +1640,31 @@ mod assembly_tests {
             &cfg,
             &DictOptions {
                 exclude_cited: true,
+                ..DictOptions::default()
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "exclude_cited/exclude_instances need the row graph")]
+    fn exclude_instances_without_a_graph_refuses_rather_than_guessing_from_names() {
+        let corpus = row_json(
+            "l6",
+            "L",
+            &format!("a(a(c(2:Eq,0),{SH}),c(1:u,0))"),
+            &[],
+            &[],
+        );
+        let cfg = IndexConfig::default();
+        let mut idx = SkeletonIndex::build(&corpus, &cfg).expect("build");
+        let _ = dictionary(
+            &mut idx,
+            None,
+            "L",
+            "R",
+            &cfg,
+            &DictOptions {
+                exclude_instances: true,
                 ..DictOptions::default()
             },
         );

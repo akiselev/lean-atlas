@@ -49,6 +49,20 @@ impl Value {
         }
     }
 
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Value::Bool(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    pub fn as_num(&self) -> Option<f64> {
+        match self {
+            Value::Num(v) => Some(*v),
+            _ => None,
+        }
+    }
+
     /// Serialize. Objects come out key-sorted because `BTreeMap` is the representation,
     /// which makes a diff between two outputs readable.
     pub fn to_json(&self) -> String {

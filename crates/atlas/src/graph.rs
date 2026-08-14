@@ -22,6 +22,41 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
+/// The current JSONL row envelope emitted by `atlas_extract`.
+///
+/// This version is intentionally separate from `atlas-stmt-v1`: the row can gain metadata
+/// without changing the canonical statement language or its digests.
+pub const ROW_SCHEMA_V2: &str = "atlas-row-v2";
+
+/// Which row envelope a declaration came from. Rows without a tag remain readable so old
+/// slices can be inspected, but metadata absent from them is reported as unknown rather
+/// than silently defaulted to `false` or an empty set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowSchema {
+    Legacy,
+    V2,
+}
+
+impl RowSchema {
+    pub const fn name(self) -> &'static str {
+        match self {
+            RowSchema::Legacy => "legacy",
+            RowSchema::V2 => ROW_SCHEMA_V2,
+        }
+    }
+}
+
+/// One statement-level class requirement observed at a concrete constant use site.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClassRequirement {
+    /// The cited constant whose signature contains the instance-implicit parameter.
+    pub source: String,
+    /// The required typeclass at that parameter.
+    pub class_name: String,
+    /// Zero-based outer binder of the declaration constrained by the class.
+    pub carrier: usize,
+}
+
 /// Which dependency edges a query walks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lens {
@@ -36,9 +71,13 @@ pub enum Lens {
 /// One declaration, as B1's extractor emits it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Decl {
+    pub schema: RowSchema,
     pub name: String,
     pub kind: String,
     pub module: String,
+    /// Whether Lean's imported instance registry contains this declaration. `None` means
+    /// a legacy row did not carry the field; it is not equivalent to `Some(false)`.
+    pub is_instance: Option<bool>,
     /// The I3 canonical statement encoding, absent when it could not be encoded.
     pub stmt: Option<String>,
     /// Why the statement could not be encoded. Present exactly when `stmt` is absent —
@@ -47,6 +86,10 @@ pub struct Decl {
     pub stmt_error: Option<String>,
     pub uses_statement: Vec<String>,
     pub uses_proof: Vec<String>,
+    /// Source-attributed carrier requirements from the statement. `Some([])` is a known
+    /// empty result from the v2 extractor; `None` means a legacy row did not report this
+    /// channel.
+    pub requirements_statement: Option<Vec<ClassRequirement>>,
 }
 
 impl Decl {
@@ -286,6 +329,12 @@ impl Graph {
 
 fn parse_row(line: &str) -> Result<Decl, String> {
     let obj = crate::json::parse(line)?;
+    parse_row_value(&obj)
+}
+
+/// Parse one already-decoded row. Shared with the skeleton index so every engine applies
+/// the same envelope-version and metadata checks without parsing the JSON twice.
+pub(crate) fn parse_row_value(obj: &crate::json::Value) -> Result<Decl, String> {
     let get_str =
         |k: &str| -> Option<String> { obj.get(k).and_then(|v| v.as_str()).map(str::to_string) };
     let get_list = |k: &str| -> Vec<String> {
@@ -300,14 +349,115 @@ fn parse_row(line: &str) -> Result<Decl, String> {
             })
             .unwrap_or_default()
     };
+    let schema = match obj.get("schema") {
+        None => RowSchema::Legacy,
+        Some(v) => match v.as_str() {
+            Some(ROW_SCHEMA_V2) => RowSchema::V2,
+            Some(other) => return Err(format!("unsupported row schema `{other}`")),
+            None => return Err("`schema` must be a string".into()),
+        },
+    };
+    let is_instance = match obj.get("is_instance") {
+        Some(v) => Some(v.as_bool().ok_or("`is_instance` must be a boolean")?),
+        None if schema == RowSchema::V2 => {
+            return Err("atlas-row-v2 row has no `is_instance`".into());
+        }
+        None => None,
+    };
+    let requirements_statement = match obj.get("requirements_statement") {
+        Some(v) => {
+            let items = v
+                .as_list()
+                .ok_or("`requirements_statement` must be a list")?;
+            let mut out = Vec::with_capacity(items.len());
+            for (j, item) in items.iter().enumerate() {
+                let source = item
+                    .get("source")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| format!("requirements_statement[{j}] has no string `source`"))?;
+                let class_name = item
+                    .get("class")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| format!("requirements_statement[{j}] has no string `class`"))?;
+                let carrier = item
+                    .get("carrier")
+                    .and_then(|v| v.as_num())
+                    .ok_or_else(|| {
+                        format!("requirements_statement[{j}] has no numeric `carrier`")
+                    })?;
+                if !carrier.is_finite()
+                    || carrier < 0.0
+                    || carrier.fract() != 0.0
+                    || carrier > usize::MAX as f64
+                {
+                    return Err(format!(
+                        "requirements_statement[{j}].carrier is not a non-negative integer"
+                    ));
+                }
+                out.push(ClassRequirement {
+                    source: source.to_string(),
+                    class_name: class_name.to_string(),
+                    carrier: carrier as usize,
+                });
+            }
+            Some(out)
+        }
+        None if schema == RowSchema::V2 => {
+            return Err("atlas-row-v2 row has no `requirements_statement`".into());
+        }
+        None => None,
+    };
+    let name = get_str("name").ok_or("row has no `name`")?;
+    let kind = match (schema, get_str("kind")) {
+        (RowSchema::V2, None) => return Err("atlas-row-v2 row has no string `kind`".into()),
+        (_, value) => value.unwrap_or_default(),
+    };
+    let module = match (schema, get_str("module")) {
+        (RowSchema::V2, None) => return Err("atlas-row-v2 row has no string `module`".into()),
+        (_, value) => value.unwrap_or_default(),
+    };
+    let strict_list = |key: &str| -> Result<Vec<String>, String> {
+        let values = obj
+            .get(key)
+            .and_then(|v| v.as_list())
+            .ok_or_else(|| format!("atlas-row-v2 row has no list `{key}`"))?;
+        values
+            .iter()
+            .enumerate()
+            .map(|(j, value)| {
+                value
+                    .as_str()
+                    .map(str::to_string)
+                    .ok_or_else(|| format!("{key}[{j}] must be a string"))
+            })
+            .collect()
+    };
+    let uses_statement = if schema == RowSchema::V2 {
+        strict_list("uses_statement")?
+    } else {
+        get_list("uses_statement")
+    };
+    let uses_proof = if schema == RowSchema::V2 {
+        strict_list("uses_proof")?
+    } else {
+        get_list("uses_proof")
+    };
+    let stmt = get_str("stmt");
+    let stmt_error = get_str("stmt_error");
+    if schema == RowSchema::V2 && stmt.is_some() == stmt_error.is_some() {
+        return Err("atlas-row-v2 row must carry exactly one of `stmt` and `stmt_error`".into());
+    }
     Ok(Decl {
-        name: get_str("name").ok_or("row has no `name`")?,
-        kind: get_str("kind").unwrap_or_default(),
-        module: get_str("module").unwrap_or_default(),
-        stmt: get_str("stmt"),
-        stmt_error: get_str("stmt_error"),
-        uses_statement: get_list("uses_statement"),
-        uses_proof: get_list("uses_proof"),
+        schema,
+        name,
+        kind,
+        module,
+        is_instance,
+        stmt,
+        stmt_error,
+        uses_statement,
+        uses_proof,
+        requirements_statement,
     })
 }
 
@@ -335,11 +485,98 @@ mod tests {
     fn reads_b1_rows_including_unencodable_ones() {
         let g = slice();
         assert_eq!(g.len(), 5);
-        assert_eq!(g.get("Nat.add_comm").unwrap().kind, "theorem");
+        let add_comm = g.get("Nat.add_comm").unwrap();
+        assert_eq!(add_comm.kind, "theorem");
+        assert_eq!(add_comm.schema, RowSchema::Legacy);
+        assert_eq!(add_comm.is_instance, None);
+        assert_eq!(add_comm.requirements_statement, None);
         // B1 keeps a row whose statement could not be encoded rather than dropping it.
         let rec = g.get("Nat.rec").unwrap();
         assert_eq!(rec.stmt, None);
         assert_eq!(rec.stmt_error.as_deref(), Some("recursor"));
+    }
+
+    #[test]
+    fn reads_v2_role_and_source_attributed_requirement_fields() {
+        let g = Graph::from_jsonl(
+            r#"{"schema":"atlas-row-v2","name":"M.foo","kind":"theorem","module":"M","is_instance":false,"stmt":"s","requirements_statement":[{"source":"HMul.hMul","class":"HMul","carrier":1},{"source":"LT.lt","class":"LT","carrier":0}],"uses_statement":[],"uses_proof":[]}"#,
+        )
+        .unwrap();
+        let d = g.get("M.foo").unwrap();
+        assert_eq!(d.schema, RowSchema::V2);
+        assert_eq!(d.is_instance, Some(false));
+        assert_eq!(
+            d.requirements_statement.as_deref(),
+            Some(
+                [
+                    ClassRequirement {
+                        source: "HMul.hMul".into(),
+                        class_name: "HMul".into(),
+                        carrier: 1,
+                    },
+                    ClassRequirement {
+                        source: "LT.lt".into(),
+                        class_name: "LT".into(),
+                        carrier: 0,
+                    },
+                ]
+                .as_slice()
+            )
+        );
+    }
+
+    #[test]
+    fn v2_known_empty_requirements_are_not_legacy_unknown() {
+        let g = Graph::from_jsonl(
+            r#"{"schema":"atlas-row-v2","name":"M.inst","kind":"theorem","module":"M","is_instance":true,"stmt":"s","requirements_statement":[],"uses_statement":[],"uses_proof":[]}"#,
+        )
+        .unwrap();
+        let d = g.get("M.inst").unwrap();
+        assert_eq!(d.is_instance, Some(true));
+        assert_eq!(d.requirements_statement, Some(Vec::new()));
+    }
+
+    #[test]
+    fn v2_refuses_missing_or_malformed_required_metadata() {
+        let missing = Graph::from_jsonl(
+            r#"{"schema":"atlas-row-v2","name":"M.foo","kind":"theorem","module":"M","requirements_statement":[],"uses_statement":[],"uses_proof":[]}"#,
+        )
+        .unwrap_err();
+        assert!(missing.to_string().contains("no `is_instance`"));
+
+        let malformed = Graph::from_jsonl(
+            r#"{"schema":"atlas-row-v2","name":"M.foo","kind":"theorem","module":"M","is_instance":false,"requirements_statement":[{"source":"f","class":"C","carrier":-1}],"uses_statement":[],"uses_proof":[]}"#,
+        )
+        .unwrap_err();
+        assert!(malformed.to_string().contains("non-negative integer"));
+
+        let ambiguous_statement = Graph::from_jsonl(
+            r#"{"schema":"atlas-row-v2","name":"M.foo","kind":"theorem","module":"M","is_instance":false,"stmt":"s","stmt_error":"also bad","requirements_statement":[],"uses_statement":[],"uses_proof":[]}"#,
+        )
+        .unwrap_err();
+        assert!(ambiguous_statement.to_string().contains("exactly one"));
+
+        let malformed_dependencies = Graph::from_jsonl(
+            r#"{"schema":"atlas-row-v2","name":"M.foo","kind":"theorem","module":"M","is_instance":false,"stmt":"s","requirements_statement":[],"uses_statement":[3],"uses_proof":[]}"#,
+        )
+        .unwrap_err();
+        assert!(
+            malformed_dependencies
+                .to_string()
+                .contains("uses_statement[0] must be a string")
+        );
+    }
+
+    #[test]
+    fn unknown_row_schema_is_distinct_from_bad_statement_data() {
+        let err = Graph::from_jsonl(
+            r#"{"schema":"atlas-row-v99","name":"M.foo","kind":"theorem","module":"M","uses_statement":[],"uses_proof":[]}"#,
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("unsupported row schema `atlas-row-v99`")
+        );
     }
 
     #[test]

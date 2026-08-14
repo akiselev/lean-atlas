@@ -129,9 +129,14 @@ const DEFAULT_WHITELIST: [&str; 3] = ["propext", "Classical.choice", "Quot.sound
 /// One declaration, as B1's extractor emitted it.
 #[pyclass(module = "atlas", frozen, get_all)]
 pub struct Decl {
+    /// The JSONL row envelope, or `legacy` for an untagged older slice.
+    pub schema: String,
     pub name: String,
     pub kind: String,
     pub module: String,
+    /// Whether Lean's instance registry contains this declaration. `None` means the
+    /// legacy row did not say; it is not `false`.
+    pub is_instance: Option<bool>,
     /// The I3 canonical statement encoding, `None` when it could not be encoded.
     pub stmt: Option<String>,
     /// Why `stmt` is absent. Present exactly when `stmt` is — B1 keeps the row rather than
@@ -144,18 +149,29 @@ pub struct Decl {
     pub uses_statement: Vec<String>,
     /// What the *argument* cites, directly.
     pub uses_proof: Vec<String>,
+    /// Source-attributed statement requirements as `(source, class, carrier)` tuples.
+    /// `Some([])` is a known-empty v2 result; `None` is legacy unknown metadata.
+    pub requirements_statement: Option<Vec<(String, String, usize)>>,
 }
 
 impl From<&CoreDecl> for Decl {
     fn from(d: &CoreDecl) -> Decl {
         Decl {
+            schema: d.schema.name().to_string(),
             name: d.name.clone(),
             kind: d.kind.clone(),
             module: d.module.clone(),
+            is_instance: d.is_instance,
             stmt: d.stmt.clone(),
             stmt_error: d.stmt_error.clone(),
             uses_statement: d.uses_statement.clone(),
             uses_proof: d.uses_proof.clone(),
+            requirements_statement: d.requirements_statement.as_ref().map(|requirements| {
+                requirements
+                    .iter()
+                    .map(|r| (r.source.clone(), r.class_name.clone(), r.carrier))
+                    .collect()
+            }),
         }
     }
 }
@@ -170,13 +186,22 @@ impl Decl {
             (None, Some(why)) => format!("stmt=None ({why})"),
             (None, None) => "stmt=None".to_string(),
         };
+        let is_instance = match self.is_instance {
+            Some(true) => "True",
+            Some(false) => "False",
+            None => "None",
+        };
         format!(
-            "Decl(name={:?}, kind={:?}, module={:?}, {stmt}, uses_statement={}, uses_proof={})",
+            "Decl(name={:?}, kind={:?}, module={:?}, schema={:?}, is_instance={is_instance}, {stmt}, uses_statement={}, uses_proof={}, requirements_statement={})",
             self.name,
             self.kind,
             self.module,
+            self.schema,
             self.uses_statement.len(),
-            self.uses_proof.len()
+            self.uses_proof.len(),
+            self.requirements_statement
+                .as_ref()
+                .map_or_else(|| "unknown".to_string(), |r| r.len().to_string())
         )
     }
 }
@@ -1788,7 +1813,7 @@ impl Corpus {
     // surface where the defect was measured: at the shipped cutoff the ClassicalInfo ~
     // Entropy dictionary returns none of the four pre-registered correspondences — none
     // is even a candidate — and with the keys admitted they are its top rows (§66).
-    // The three §74 knobs land here in the same change that adds them to the engine, per
+    // The §74 knobs land here in the same change that adds them to the engine, per
     // CLAUDE.md §6: a query that exists only below the binding is one validation scripts
     // cannot afford to call. `rank_by_retention` orders candidates and rows by retention
     // (the four validated cross-domain correspondences rank 437–1,150 of 3,029 under the
@@ -1798,7 +1823,7 @@ impl Corpus {
     // `exclude_cited` drops rows whose declarations cite each other, frontier's notion —
     // 14 of §74's graded top-40 were a framework paired with its own instantiations.
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (left, right, per_decl = 1, theorems_only = true, anchor = "root", normalize_arity = false, score = "retention", max_per_right = None, posting_work_budget = None, rank_by_retention = false, per_decl_keep_displaced = false, exclude_cited = false))]
+    #[pyo3(signature = (left, right, per_decl = 1, theorems_only = true, anchor = "root", normalize_arity = false, score = "retention", max_per_right = None, posting_work_budget = None, rank_by_retention = false, per_decl_keep_displaced = false, exclude_cited = false, exclude_instances = false))]
     fn dictionary(
         &self,
         py: Python<'_>,
@@ -1814,6 +1839,7 @@ impl Corpus {
         rank_by_retention: bool,
         per_decl_keep_displaced: bool,
         exclude_cited: bool,
+        exclude_instances: bool,
     ) -> PyResult<Dictionary> {
         // The anchor reaches `dictionary` for the same reason it reaches `similar` and
         // `generalize`. Without it the Z~FF dictionary returned **0 rows** while the pairs
@@ -1846,6 +1872,7 @@ impl Corpus {
                     rank_by_retention,
                     per_decl_keep_displaced,
                     exclude_cited,
+                    exclude_instances,
                     ..dict::DictOptions::default()
                 },
             ))

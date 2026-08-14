@@ -105,11 +105,23 @@ class Decl:
     """One declaration, as B1's extractor emitted it."""
 
     @property
+    def schema(self) -> str:
+        """The JSONL row envelope, or `legacy` for an untagged older slice."""
+
+    @property
     def name(self) -> str: ...
     @property
     def kind(self) -> str: ...
     @property
     def module(self) -> str: ...
+    @property
+    def is_instance(self) -> bool | None:
+        """Whether Lean registered this declaration as an instance.
+
+        `None` means an older row did not carry the field; it is not equivalent to
+        `False`.
+        """
+
     @property
     def stmt(self) -> str | None:
         """The I3 canonical statement encoding, `None` when it could not be encoded."""
@@ -129,6 +141,13 @@ class Decl:
     @property
     def uses_proof(self) -> list[str]:
         """What the argument cites, directly."""
+
+    @property
+    def requirements_statement(self) -> list[tuple[str, str, int]] | None:
+        """Source-attributed `(source, class, carrier)` statement requirements.
+
+        An empty list is a known-empty v2 result. `None` means legacy unknown metadata.
+        """
 
     def __repr__(self) -> str: ...
 
@@ -914,6 +933,7 @@ class Corpus:
         rank_by_retention: bool = False,
         per_decl_keep_displaced: bool = False,
         exclude_cited: bool = False,
+        exclude_instances: bool = False,
     ) -> Dictionary:
         """The maximal partial functor between two theories.
 
@@ -945,6 +965,10 @@ class Corpus:
         `exclude_cited` drops rows whose two declarations cite each other — either
         direction, either lens, frontier's notion of a citation link. 14 of §74's graded
         top-40 were a framework paired with its own instantiations.
+
+        `exclude_instances` drops declarations that Lean's v2 extractor reports as
+        registered instances. Legacy rows with unknown status remain; names are not used
+        as a substitute for registry evidence.
         """
 
     def transport(

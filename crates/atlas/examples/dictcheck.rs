@@ -159,12 +159,12 @@ fn main() {
     println!("\nwith the contaminating families excluded:");
     let clean_opts = DictOptions {
         exclude_subprefix: vec!["Mathlib.Algebra.Order".to_string()],
-        exclude_roles: vec!["inst*".to_string()],
+        exclude_instances: true,
         ..DictOptions::default()
     };
     let dc = dictionary(
         &mut idx,
-        None,
+        Some(&graph),
         "Mathlib.Order",
         "Mathlib.Algebra",
         &cfg,

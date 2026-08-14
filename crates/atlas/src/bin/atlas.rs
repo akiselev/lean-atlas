@@ -48,7 +48,8 @@ which chooses how much to erase before comparing; `--top N`; and `--brute` to sk
 index and compare against every declaration (slow, and the differential reference).
 
 `dictionary` and `frontier` restrict to theorems unless `--all-kinds`; `frontier` takes
-`--exclude A,B` to drop infrastructure namespaces.
+`--exclude A,B` to drop infrastructure namespaces. `dictionary --exclude-instances` drops
+declarations that the v2 extractor reports as registered instances.
 
 The lens selects which edges are walked: `statement` is what claims rest on, `proof` is
 what arguments rest on, `both` is the citation graph. Default: both.
@@ -93,6 +94,7 @@ fn run(args: &[String]) -> Result<Report, String> {
         top,
         brute,
         all_kinds,
+        exclude_instances,
         exclude,
         rest,
     } = take_options(args)?;
@@ -302,12 +304,13 @@ fn run(args: &[String]) -> Result<Report, String> {
             let mut idx = SkeletonIndex::build(&input, &cfg).map_err(|e| e.to_string())?;
             let opts = DictOptions {
                 theorems_only: !all_kinds,
+                exclude_instances,
                 // The exclusions are opt-in on the CLI so the default output stays
                 // comparable with what was measured before them.
                 exclude_subprefix: exclude.clone(),
                 ..DictOptions::default()
             };
-            let d = dictionary(&mut idx, None, left, right, &cfg, &opts);
+            let d = dictionary(&mut idx, Some(&g), left, right, &cfg, &opts);
             let mut out = String::new();
             for r in d.rows.iter().take(top) {
                 out.push_str(&format!(
@@ -455,6 +458,7 @@ struct Options {
     top: usize,
     brute: bool,
     all_kinds: bool,
+    exclude_instances: bool,
     exclude: Vec<String>,
     rest: Vec<String>,
 }
@@ -465,6 +469,7 @@ fn take_options(args: &[String]) -> Result<Options, String> {
     let mut top = 10usize;
     let mut brute = false;
     let mut all_kinds = false;
+    let mut exclude_instances = false;
     let mut exclude = Vec::new();
     let mut rest = Vec::new();
     let mut it = args.iter();
@@ -492,6 +497,7 @@ fn take_options(args: &[String]) -> Result<Options, String> {
             // two *recursors* is a fact about how Lean compiles inductives, not a
             // structure-preserving map between theories.
             "--all-kinds" => all_kinds = true,
+            "--exclude-instances" => exclude_instances = true,
             "--exclude" => {
                 let v = it.next().ok_or("--exclude takes a comma-separated list")?;
                 exclude.extend(v.split(',').map(|s| s.trim().to_string()));
@@ -505,6 +511,7 @@ fn take_options(args: &[String]) -> Result<Options, String> {
         top,
         brute,
         all_kinds,
+        exclude_instances,
         exclude,
         rest,
     })

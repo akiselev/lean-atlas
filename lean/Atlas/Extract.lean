@@ -31,6 +31,11 @@ omits rows is indistinguishable from one that missed them.
 namespace Atlas
 open Lean
 
+/-- Version of the JSONL row envelope. This is separate from `atlas-stmt-v1`, whose tag
+lives inside each statement encoding: changing row fields must not masquerade as changing
+the canonical statement language. -/
+def rowSchema : String := "atlas-row-v2"
+
 /-- One class requirement observed at a concrete use site.
 
 `carrier` is the zero-based position of the declaration's outer binder that the required
@@ -87,13 +92,13 @@ def Row.toJson (r : Row) : Json :=
        ("class", Json.str req.className.toString),
        ("carrier", Json.num req.carrier)]
   Json.mkObj <|
-    [("name", toString r.name), ("kind", r.kind), ("module", toString r.module)].map
+    [("schema", rowSchema), ("name", toString r.name), ("kind", r.kind),
+      ("module", toString r.module)].map
       (fun (k, v) => (k, Json.str v))
     ++ [("is_instance", Json.bool r.isInstance)]
     ++ (match r.stmt with | some s => [("stmt", Json.str s)] | none => [])
     ++ (match r.stmtError with | some e => [("stmt_error", Json.str e)] | none => [])
-    ++ (if r.requirementsStatement.isEmpty then [] else
-          [("requirements_statement", requirementsJson r.requirementsStatement)])
+    ++ [("requirements_statement", requirementsJson r.requirementsStatement)]
     ++ [("uses_statement", Json.arr (r.usesStatement.map (Json.str <| toString ·))),
         ("uses_proof", Json.arr (r.usesProof.map (Json.str <| toString ·)))]
 
@@ -371,6 +376,38 @@ def selectNames (env : Environment) (ms : Array Name) : Array Name := Id.run do
   if wanted.contains env.mainModule then
     for (n, _) in env.constants.map₂.toList do
       if isExtractable n then names := names.push n
+  return sortedByString names
+
+/-- The smallest extractable slice containing `roots` and every constant mentioned by the
+statements in that slice.
+
+This is the storage-conscious alternative to `allNames`. A local-only slice is not sound
+for instance/carrier erasure because the signature of an application head may be absent;
+serialising the entire imported environment repairs that but can add hundreds of thousands
+of unrelated declarations. This work-list follows `ConstantInfo.type` only until a fixed
+point, which is exactly the closure the skeleton eraser requires. Proof dependencies are
+deliberately not followed: callers studying the proof or combined dependency lenses still
+need a whole-environment extraction (or a future explicitly proof-closed mode).
+
+Internal-detail names reached from a statement are emitted even though they are omitted
+from ordinary root populations: their signatures can still determine which arguments the
+eraser holes. Names without a declaration remain visible as missing heads to
+`atlas_closure`, so this helper cannot turn an unrepresentable slice into a false pass. -/
+def statementClosureNames (env : Environment) (roots : Array Name) : Array Name := Id.run do
+  let mut seen : NameSet := {}
+  let mut frontier := roots
+  let mut names := #[]
+  while !frontier.isEmpty do
+    let current := frontier
+    frontier := #[]
+    for n in current do
+      if !seen.contains n then
+        seen := seen.insert n
+        if let some info := env.find? n then
+          names := names.push n
+          for dependency in info.type.getUsedConstants do
+            if !seen.contains dependency then
+              frontier := frontier.push dependency
   return sortedByString names
 
 /-- Encode a chosen set of names. -/

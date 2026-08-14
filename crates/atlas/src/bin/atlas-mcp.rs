@@ -212,7 +212,7 @@ fn tool_list() -> Value {
         tool(
             "atlas_dictionary",
             "The maximal partial functor between two theory prefixes: skeleton-matched \
-             rows plus the counts of unmatched declarations on each side. The three \
+             rows plus the counts of unmatched declarations on each side. The assembly \
              assembly knobs are the §74 repairs, all default-off. `rank_by_retention` \
              orders by retention instead of the full score — cross-domain, size-flavoured \
              score factors reward shared framework mass, and the validated \
@@ -221,7 +221,9 @@ fn tool_list() -> Value {
              per-left cap per skeleton, so a structurally different claim is not evicted \
              by a higher-ranked lookalike (315 rows were displaced that way, the von \
              Neumann ~ Gibbs entropy bridge among them). `exclude_cited` drops rows whose \
-             declarations cite each other — usage, not analogy. Set \
+             declarations cite each other — usage, not analogy. `exclude_instances` uses \
+             Lean's registry metadata to drop registered instances without guessing from \
+             names. Set \
              `posting_work_budget=2000` with `anchor=conclusion` when hunting across \
              theories, as for `atlas_similar`. Loads the slice and builds an index per \
              call; loops belong on the Python binding.",
@@ -256,6 +258,11 @@ fn tool_list() -> Value {
                         "exclude_cited",
                         "`true` drops rows whose two declarations cite each other, \
                          either lens, either direction (default `false`)",
+                    ),
+                    (
+                        "exclude_instances",
+                        "`true` drops declarations registered as instances by Lean; \
+                         legacy rows with unknown status remain (default `false`)",
                     ),
                 ],
                 &["slice", "left", "right"],
@@ -493,11 +500,12 @@ fn call_tool(params: &Value) -> Result<String, String> {
                 rank_by_retention: opt_bool("rank_by_retention")?,
                 per_decl_keep_displaced: opt_bool("per_decl_keep_displaced")?,
                 exclude_cited: opt_bool("exclude_cited")?,
+                exclude_instances: opt_bool("exclude_instances")?,
                 ..DictOptions::default()
             };
-            // The graph is only paid for when the filter that reads it is on; the engine
-            // refuses `exclude_cited` without one, so this cannot silently no-op.
-            let graph = if opts.exclude_cited {
+            // The graph is only paid for when a filter reads complete row metadata; the
+            // engine refuses either filter without one, so neither can silently no-op.
+            let graph = if opts.exclude_cited || opts.exclude_instances {
                 Some(Graph::from_jsonl(&text).map_err(|e| e.to_string())?)
             } else {
                 None
