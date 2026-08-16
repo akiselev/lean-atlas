@@ -92,8 +92,7 @@ impl ArtifactLink {
         if kind == ArtifactRelationKind::ReifiedAs
             && !matches!(
                 evidence,
-                ArtifactEvidence::LeanTheorem { .. }
-                    | ArtifactEvidence::CheckedCertificate { .. }
+                ArtifactEvidence::LeanTheorem { .. } | ArtifactEvidence::CheckedCertificate { .. }
             )
         {
             return Err(ArtifactLinkError::InsufficientEvidence { kind });
@@ -113,8 +112,7 @@ impl ArtifactLink {
             (&self.kind, &self.evidence),
             (
                 ArtifactRelationKind::ReifiedAs | ArtifactRelationKind::RefinedInto,
-                ArtifactEvidence::LeanTheorem { .. }
-                    | ArtifactEvidence::CheckedCertificate { .. }
+                ArtifactEvidence::LeanTheorem { .. } | ArtifactEvidence::CheckedCertificate { .. }
             )
         )
     }
