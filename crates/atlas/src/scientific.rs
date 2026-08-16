@@ -93,6 +93,20 @@ pub struct ScientificIndex {
 impl ScientificIndex {
     pub fn insert(&mut self, refinement: ScientificRefinement) -> Option<ScientificRefinement> {
         let receipt = refinement.receipt.clone();
+        let replaced = self.by_receipt.remove(&receipt);
+        if let Some(old) = &replaced {
+            for digest in [&old.source.digest, &old.target.digest] {
+                let mut delete_bucket = false;
+                if let Some(refs) = self.by_artifact.get_mut(digest) {
+                    refs.retain(|id| id != &receipt);
+                    delete_bucket = refs.is_empty();
+                }
+                if delete_bucket {
+                    self.by_artifact.remove(digest);
+                }
+            }
+        }
+
         for digest in [&refinement.source.digest, &refinement.target.digest] {
             let refs = self.by_artifact.entry(digest.clone()).or_default();
             if !refs.contains(&receipt) {
@@ -100,17 +114,15 @@ impl ScientificIndex {
                 refs.sort();
             }
         }
-        self.by_receipt.insert(receipt, refinement)
+        self.by_receipt.insert(receipt, refinement);
+        replaced
     }
 
     pub fn get(&self, receipt: &str) -> Option<&ScientificRefinement> {
         self.by_receipt.get(receipt)
     }
 
-    pub fn touching_artifact(
-        &self,
-        digest: &str,
-    ) -> impl Iterator<Item = &ScientificRefinement> {
+    pub fn touching_artifact(&self, digest: &str) -> impl Iterator<Item = &ScientificRefinement> {
         self.by_artifact
             .get(digest)
             .into_iter()
@@ -123,7 +135,9 @@ impl ScientificIndex {
     }
 
     pub fn unresolved(&self) -> impl Iterator<Item = &ScientificRefinement> {
-        self.by_receipt.values().filter(|r| r.has_open_obligations())
+        self.by_receipt
+            .values()
+            .filter(|r| r.has_open_obligations())
     }
 
     pub fn without_formal_warrant(&self) -> impl Iterator<Item = &ScientificRefinement> {
@@ -204,5 +218,41 @@ mod tests {
         });
         assert_eq!(index.scope_changes().count(), 1);
         assert_eq!(index.unresolved().count(), 1);
+    }
+
+    #[test]
+    fn replacing_a_receipt_updates_artifact_indexes() {
+        let mut index = ScientificIndex::default();
+        let first = ScientificRefinement {
+            receipt: "r3".into(),
+            source: ScientificArtifact {
+                digest: "old-source".into(),
+                kind: ScientificArtifactKind::FormalSpec,
+                locator: None,
+                producer: "lean".into(),
+            },
+            target: ScientificArtifact {
+                digest: "old-target".into(),
+                kind: ScientificArtifactKind::ResolventModel,
+                locator: None,
+                producer: "resolvent".into(),
+            },
+            relation: "reformulation".into(),
+            source_scope: scope("declared"),
+            target_scope: scope("declared"),
+            open_obligations: Vec::new(),
+            evidence: Vec::new(),
+            lean_theorem: None,
+        };
+        index.insert(first.clone());
+        let mut replacement = first;
+        replacement.source.digest = "new-source".into();
+        replacement.target.digest = "new-target".into();
+        index.insert(replacement);
+
+        assert_eq!(index.touching_artifact("old-source").count(), 0);
+        assert_eq!(index.touching_artifact("old-target").count(), 0);
+        assert_eq!(index.touching_artifact("new-source").count(), 1);
+        assert_eq!(index.touching_artifact("new-target").count(), 1);
     }
 }
