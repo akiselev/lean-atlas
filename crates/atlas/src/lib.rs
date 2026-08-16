@@ -13,5 +13,6 @@ pub mod intuition_viewpoint;
 pub mod json;
 pub mod logical;
 pub mod relation;
+pub mod scientific;
 pub mod skel;
 pub mod statement;
