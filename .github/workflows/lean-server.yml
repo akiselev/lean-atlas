@@ -22,9 +22,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          plugin="$(find lean-server/.lake/build -type f \( -name '*.so' -o -name '*.dylib' -o -name '*.dll' \) -print | grep 'AtlasServer' | head -n1 || true)"
+          plugin="$(find lean-server/.lake/build -type f \( \
+            -name 'libatlasServer_Atlas_Server_Plugin.so' -o \
+            -name 'libatlasServer_Atlas_Server_Plugin.dylib' -o \
+            -name 'atlasServer_Atlas_Server_Plugin.dll' -o \
+            -name 'libatlasServer_Atlas_Server_Plugin.dll' \
+          \) -print -quit)"
           if [[ -z "$plugin" ]]; then
-            echo "AtlasServer shared target not found. Dynamic-library candidates:" >&2
+            echo "Atlas.Server.Plugin shared target not found. Dynamic-library candidates:" >&2
             find lean-server/.lake/build -type f \( -name '*.so' -o -name '*.dylib' -o -name '*.dll' \) -print >&2
             exit 1
           fi
