@@ -69,7 +69,7 @@ def synthInstanceQuery (req : SynthInstanceRequest) : RequestM (RequestTask (Ora
     match result with
     | .error e => return { failure := some e }
     | .ok (inst, dependencies, pretty) =>
-      return { value := some { instance := ← WithRpcRef.mk inst, dependencies, pretty } }
+      return { value := some { «instance» := ← WithRpcRef.mk inst, dependencies, pretty } }
 
 def applyQuery (req : ApplyRequest) : RequestM (RequestTask (OracleResult ApplyResponse)) :=
   RequestM.withWaitFindSnapAtPos req.position fun snap => do
