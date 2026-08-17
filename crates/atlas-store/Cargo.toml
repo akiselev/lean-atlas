@@ -1,0 +1,13 @@
+[package]
+name = "atlas-store"
+description = "Durable semantic fact and provenance store for Lean Atlas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+atlas-schema = { path = "../atlas-schema" }
+rusqlite = { version = "0.40.1", features = ["bundled"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
