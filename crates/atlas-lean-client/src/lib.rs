@@ -158,8 +158,9 @@ impl LeanClient {
     ) -> Result<(), ClientError> {
         let refs = refs
             .into_iter()
-            .map(|r| json!({"__rpcref":r.id}))
-            .collect::<Vec<Value>>();
+            .map(serde_json::to_value)
+            .collect::<Result<Vec<Value>, _>>()
+            .map_err(TransportError::Json)?;
         self.transport
             .notify(
                 "$/lean/rpc/release",
