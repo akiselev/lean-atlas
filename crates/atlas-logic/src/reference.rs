@@ -1,5 +1,5 @@
 use crate::{EvalOptions, FactSource, Literal, LogicError, Program, Query, QueryRow, eval};
-use atlas_schema::{Bindings, FactId, FactRow, FactWarrant, Provenance, RelationTypeId, Value};
+use atlas_schema::{Bindings, FactId, FactRow, Provenance, RelationTypeId, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -58,11 +58,12 @@ pub fn evaluate_reference<S: FactSource>(
                         continue;
                     };
                     if seen.insert((rule.head.relation, args.clone())) {
+                        let warrant = eval::derived_warrant(&db, &support);
                         let f = FactRow {
                             id: FactId(next),
                             relation: rule.head.relation,
                             args,
-                            warrant: FactWarrant::Structural,
+                            warrant,
                             provenance: Provenance::Derived {
                                 rule: rule.id.clone(),
                                 inputs: support,
