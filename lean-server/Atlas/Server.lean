@@ -6,11 +6,11 @@ import Lean.Server.FileWorker.RequestHandling
 # Atlas live semantic RPC plugin
 
 This module is compiled as a shared Lean plugin and loaded by `lean --server --plugin=...`.
-It keeps heavyweight `Expr` values inside Lean through `WithRpcRef` and exposes a small,
-versioned semantic surface to the Rust index/query process.
+It keeps heavyweight `Expr` values inside Lean through Atlas-owned RPC handles and exposes a
+small, versioned semantic surface to the Rust index/query process.
 
-The portable JSONL extractor under `../lean` remains independent and is not replaced by
-this package.
+The portable JSONL extractor under `../lean` remains independent and is not replaced by this
+package.
 -/
 
 namespace Atlas.Server
@@ -23,6 +23,15 @@ open Lean.Server.Snapshots
 private def protocolVersion : Nat := 1
 private def protocolSchema : String := "atlas-lean-rpc-v1"
 private def pluginVersion : String := "0.1.0"
+
+/--
+`WithRpcRef α` requires `[TypeName α]` because Lean's RPC object store dynamically type-checks
+references. Core `Expr` intentionally does not expose such an instance. Keep the type identity
+Atlas-local rather than installing a global instance for `Expr`.
+-/
+structure ExprHandle where
+  expr : Expr
+  deriving TypeName
 
 structure HelloRequest where
   protocol : Nat
@@ -47,7 +56,7 @@ structure LookupDeclarationRequest extends AtPosition where
 structure DeclarationRef where
   name : String
   kind : String
-  typeRef : WithRpcRef Expr
+  typeRef : WithRpcRef ExprHandle
   uses : Array String
   deriving RpcEncodable
 
@@ -56,7 +65,7 @@ structure LookupDeclarationResponse where
   deriving RpcEncodable
 
 structure ExprRequest extends AtPosition where
-  expr : WithRpcRef Expr
+  expr : WithRpcRef ExprHandle
   deriving RpcEncodable
 
 structure UsedConstantsResponse where
@@ -64,12 +73,12 @@ structure UsedConstantsResponse where
   deriving RpcEncodable
 
 structure ExprResponse where
-  expr : WithRpcRef Expr
+  expr : WithRpcRef ExprHandle
   deriving RpcEncodable
 
 structure DefEqRequest extends AtPosition where
-  lhs : WithRpcRef Expr
-  rhs : WithRpcRef Expr
+  lhs : WithRpcRef ExprHandle
+  rhs : WithRpcRef ExprHandle
   deriving RpcEncodable
 
 structure DefEqResponse where
@@ -128,7 +137,7 @@ private def lookupDeclaration (request : LookupDeclarationRequest) :
     let name := nameOfString request.name
     let some info := snapshot.env.find? name
       | return { declaration := none }
-    let typeRef ← WithRpcRef.mk info.type
+    let typeRef ← WithRpcRef.mk { expr := info.type }
     return {
       declaration := some {
         name := name.toString
@@ -140,24 +149,24 @@ private def lookupDeclaration (request : LookupDeclarationRequest) :
 
 private def usedConstants (request : ExprRequest) : RequestM (RequestTask UsedConstantsResponse) :=
   pureTask do
-    return { constants := sortedConstants request.expr.val }
+    return { constants := sortedConstants request.expr.val.expr }
 
 private def inferType (request : ExprRequest) : RequestM (RequestTask ExprResponse) :=
   withSnapshotAt request.position (notFound := throw .fileChanged) fun snapshot doc => do
     let type ← snapshot.runTermElabM doc.meta do
-      Meta.inferType request.expr.val
-    return { expr := ← WithRpcRef.mk type }
+      Meta.inferType request.expr.val.expr
+    return { expr := ← WithRpcRef.mk { expr := type } }
 
 private def whnf (request : ExprRequest) : RequestM (RequestTask ExprResponse) :=
   withSnapshotAt request.position (notFound := throw .fileChanged) fun snapshot doc => do
     let reduced ← snapshot.runTermElabM doc.meta do
-      Meta.whnf request.expr.val
-    return { expr := ← WithRpcRef.mk reduced }
+      Meta.whnf request.expr.val.expr
+    return { expr := ← WithRpcRef.mk { expr := reduced } }
 
 private def defEq (request : DefEqRequest) : RequestM (RequestTask DefEqResponse) :=
   withSnapshotAt request.position (notFound := throw .fileChanged) fun snapshot doc => do
     let equal ← snapshot.runTermElabM doc.meta do
-      Meta.isDefEq request.lhs.val request.rhs.val
+      Meta.isDefEq request.lhs.val.expr request.rhs.val.expr
     return { equal }
 
 builtin_initialize
