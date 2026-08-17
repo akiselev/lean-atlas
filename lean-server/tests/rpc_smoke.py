@@ -117,9 +117,10 @@ def rpc_call(
     )
 
 
-def ref_id(handle: dict[str, Any]) -> int:
+def ref_id(handle: dict[str, Any]) -> str:
     value = handle.get("__rpcref")
-    assert isinstance(value, int), f"not an RPC ref: {handle!r}"
+    assert isinstance(value, str), f"not a v1 RPC ref: {handle!r}"
+    int(value)  # validate canonical bignum payload
     return value
 
 
@@ -148,7 +149,7 @@ def main() -> int:
     assert plugin.exists(), plugin
 
     lsp = Lsp([str(lean), "--server", f"--plugin={plugin}"], root)
-    refs_to_release: set[int] = set()
+    refs_to_release: set[str] = set()
     try:
         lsp.request(
             "initialize",
@@ -176,7 +177,8 @@ def main() -> int:
 
         connected = lsp.request("$/lean/rpc/connect", {"uri": uri})
         session_id = connected["sessionId"]
-        assert isinstance(session_id, (int, str)), connected
+        assert isinstance(session_id, str), connected
+        int(session_id)
 
         hello = rpc_call(
             lsp,
