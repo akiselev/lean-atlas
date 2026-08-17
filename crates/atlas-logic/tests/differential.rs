@@ -2,8 +2,15 @@ use atlas_logic::*;
 use atlas_schema::{FactId, FactRow, FactWarrant, Provenance, RelationTypeId, Value};
 use proptest::prelude::*;
 
-fn atom(rel: RelationTypeId, a: Term, b: Term) -> Atom { Atom { relation: rel, terms: vec![a,b] } }
-fn v(name: &str) -> Term { Term::Var(name.into()) }
+fn atom(rel: RelationTypeId, a: Term, b: Term) -> Atom {
+    Atom {
+        relation: rel,
+        terms: vec![a, b],
+    }
+}
+fn v(name: &str) -> Term {
+    Term::Var(name.into())
+}
 
 proptest! {
     #[test]
@@ -30,7 +37,18 @@ proptest! {
 
 #[test]
 fn optimized_honors_cancellation() {
-    let token=CancellationToken::default(); token.cancel();
-    let result=evaluate_optimized(&MemoryFacts::default(),&Program::default(),&Query{project:vec![],body:vec![],limit:None},EvalOptions::default(),&token);
-    assert!(matches!(result,Err(LogicError::Cancelled)));
+    let token = CancellationToken::default();
+    token.cancel();
+    let result = evaluate_optimized(
+        &MemoryFacts::default(),
+        &Program::default(),
+        &Query {
+            project: vec![],
+            body: vec![],
+            limit: None,
+        },
+        EvalOptions::default(),
+        &token,
+    );
+    assert!(matches!(result, Err(LogicError::Cancelled)));
 }

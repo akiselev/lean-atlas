@@ -1,4 +1,4 @@
-pub const V1:&str=r#"
+pub const V1: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS entities(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,canonical_name TEXT);
 CREATE TABLE IF NOT EXISTS declarations(id INTEGER PRIMARY KEY,entity_id INTEGER,lean_name TEXT NOT NULL,module TEXT);

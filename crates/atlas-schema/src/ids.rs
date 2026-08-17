@@ -9,6 +9,16 @@ macro_rules! id_type {
 }
 
 id_type!(
-    DeclarationId, EntityId, FactId, RelationTypeId, EvidenceId, ArtifactLinkId,
-    DatasetId, ExperimentId, CandidateId, AssayId, OracleReceiptId, EnvironmentId,
+    DeclarationId,
+    EntityId,
+    FactId,
+    RelationTypeId,
+    EvidenceId,
+    ArtifactLinkId,
+    DatasetId,
+    ExperimentId,
+    CandidateId,
+    AssayId,
+    OracleReceiptId,
+    EnvironmentId,
 );

@@ -1,5 +1,5 @@
 use serde::de::DeserializeOwned;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{path::PathBuf, process::Stdio};
 use thiserror::Error;
 use tokio::{
@@ -50,7 +50,12 @@ impl Transport {
             .map_err(TransportError::Spawn)?;
         let stdin = child.stdin.take().ok_or(TransportError::Closed)?;
         let stdout = BufReader::new(child.stdout.take().ok_or(TransportError::Closed)?);
-        let mut transport = Self { child, stdin, stdout, next_id: 1 };
+        let mut transport = Self {
+            child,
+            stdin,
+            stdout,
+            next_id: 1,
+        };
         let _: Value = transport
             .request(
                 "initialize",

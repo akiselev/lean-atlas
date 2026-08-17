@@ -13,7 +13,9 @@ pub struct FactIndex {
 impl FactIndex {
     pub fn build(facts: impl IntoIterator<Item = FactRow>) -> Self {
         let mut out = Self::default();
-        for fact in facts { out.insert(fact); }
+        for fact in facts {
+            out.insert(fact);
+        }
         out
     }
 
@@ -21,22 +23,41 @@ impl FactIndex {
         let rows = self.by_relation.entry(fact.relation).or_default();
         let row = rows.len();
         for (position, value) in fact.args.iter().cloned().enumerate() {
-            self.by_arg.entry((fact.relation, position, value)).or_default().insert(row);
+            self.by_arg
+                .entry((fact.relation, position, value))
+                .or_default()
+                .insert(row);
         }
         rows.push(fact);
     }
 
     pub fn relation(&self, relation: RelationTypeId) -> &[FactRow] {
-        self.by_relation.get(&relation).map(Vec::as_slice).unwrap_or(&[])
+        self.by_relation
+            .get(&relation)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
     }
 
-    pub fn select(&self, relation: RelationTypeId, position: usize, value: &Value) -> Vec<&FactRow> {
-        let Some(rows) = self.by_relation.get(&relation) else { return vec![]; };
-        self.by_arg.get(&(relation, position, value.clone()))
-            .into_iter().flat_map(|ids| ids.iter()).filter_map(|i| rows.get(*i)).collect()
+    pub fn select(
+        &self,
+        relation: RelationTypeId,
+        position: usize,
+        value: &Value,
+    ) -> Vec<&FactRow> {
+        let Some(rows) = self.by_relation.get(&relation) else {
+            return vec![];
+        };
+        self.by_arg
+            .get(&(relation, position, value.clone()))
+            .into_iter()
+            .flat_map(|ids| ids.iter())
+            .filter_map(|i| rows.get(*i))
+            .collect()
     }
 
-    pub fn cardinality(&self, relation: RelationTypeId) -> usize { self.relation(relation).len() }
+    pub fn cardinality(&self, relation: RelationTypeId) -> usize {
+        self.relation(relation).len()
+    }
 }
 
 #[cfg(test)]
@@ -46,8 +67,19 @@ mod tests {
 
     #[test]
     fn exact_argument_index_preserves_rows() {
-        let f = FactRow { id: FactId(1), relation: RelationTypeId(9), args: vec![Value::Integer(7)], warrant: FactWarrant::Structural, provenance: Provenance::Source { source: "fixture".into() } };
+        let f = FactRow {
+            id: FactId(1),
+            relation: RelationTypeId(9),
+            args: vec![Value::Integer(7)],
+            warrant: FactWarrant::Structural,
+            provenance: Provenance::Source {
+                source: "fixture".into(),
+            },
+        };
         let index = FactIndex::build([f.clone()]);
-        assert_eq!(index.select(RelationTypeId(9), 0, &Value::Integer(7)), vec![&f]);
+        assert_eq!(
+            index.select(RelationTypeId(9), 0, &Value::Integer(7)),
+            vec![&f]
+        );
     }
 }
