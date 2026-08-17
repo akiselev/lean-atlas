@@ -8,15 +8,16 @@ open Lean Server Lsp Meta Elab Term
 
 private def failure (kind message : String) : LeanFailure := { kind, message }
 
-def captureMeta (kind : String) (action : MetaM α) : MetaM (Except LeanFailure α) := do
+/-- Run a MetaM action from CoreM and turn Lean exceptions into durable Atlas failures. -/
+def captureMeta (kind : String) (action : MetaM α) : CoreM (Except LeanFailure α) := do
   try
-    return .ok (← action)
+    return .ok (← MetaM.run' action)
   catch ex =>
     return .error (failure kind (← ex.toMessageData.toString))
 
 partial def collectConstants (e : Expr) (out : Array Name := #[]) : Array Name :=
   match e with
-  | .const n _ => if out.contains n then out else out.push n
+  | .const n _ => if out.any (fun x => x == n) then out else out.push n
   | .app f a => collectConstants a (collectConstants f out)
   | .lam _ t b _ | .forallE _ t b _ => collectConstants b (collectConstants t out)
   | .letE _ t v b _ => collectConstants b (collectConstants v (collectConstants t out))
@@ -30,7 +31,7 @@ def prettyExpr (e : Expr) : MetaM String := do
 def parseTerm (text : String) : CoreM Syntax := do
   let env ← getEnv
   match Parser.runParserCategory env `term text with
-  | .ok stx => return stx
-  | .error err => throwError err
+  | Except.ok stx => return stx
+  | Except.error err => throwError err
 
 end Atlas.Server
