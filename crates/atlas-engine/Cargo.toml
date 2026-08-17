@@ -1,0 +1,14 @@
+[package]
+name="atlas-engine"
+version.workspace=true
+edition.workspace=true
+license.workspace=true
+
+[dependencies]
+atlas-schema.workspace=true
+atlas-index.workspace=true
+atlas-store.workspace=true
+atlas-logic.workspace=true
+atlas-lean-protocol.workspace=true
+atlas-lean-client.workspace=true
+thiserror.workspace=true
