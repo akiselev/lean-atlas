@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/atlas-schema",
+    "crates/atlas-index",
     "crates/atlas-store",
     "crates/atlas-logic",
     "crates/atlas-lean-protocol",

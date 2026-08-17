@@ -17,6 +17,7 @@ jobs:
         run: >-
           cargo test
           -p atlas-schema
+          -p atlas-index
           -p atlas-store
           -p atlas-logic
           -p atlas-lean-protocol

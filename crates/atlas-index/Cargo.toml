@@ -1,0 +1,6 @@
+[package]
+name = "atlas-index"
+description = "Lean-independent structural term normalization and anti-unification indexes for Lean Atlas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
