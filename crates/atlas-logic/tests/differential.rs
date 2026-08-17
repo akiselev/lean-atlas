@@ -1,5 +1,7 @@
 use atlas_logic::*;
-use atlas_schema::{FactId, FactRow, FactWarrant, Provenance, RelationTypeId, Value};
+use atlas_schema::{
+    FactId, FactRow, FactWarrant, Provenance, RelationTypeId, SourceEvidence, Value,
+};
 use proptest::prelude::*;
 
 fn atom(rel: RelationTypeId, a: Term, b: Term) -> Atom {
@@ -20,7 +22,10 @@ proptest! {
             id:FactId(i as u64+1), relation:edge,
             args:vec![Value::Integer(a as i64),Value::Integer(b as i64)],
             warrant:FactWarrant::Structural,
-            provenance:Provenance::Source{source:"generated".into()},
+            provenance:Provenance::Source{
+                source:"generated".into(),
+                evidence:SourceEvidence::Structural,
+            },
         }).collect::<Vec<_>>();
         let source=MemoryFacts::new(facts);
         let program=Program{rules:vec![
