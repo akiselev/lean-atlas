@@ -63,7 +63,7 @@ impl FactIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use atlas_schema::{FactId, FactWarrant, Provenance};
+    use atlas_schema::{FactId, FactWarrant, Provenance, SourceEvidence};
 
     #[test]
     fn exact_argument_index_preserves_rows() {
@@ -74,6 +74,7 @@ mod tests {
             warrant: FactWarrant::Structural,
             provenance: Provenance::Source {
                 source: "fixture".into(),
+                evidence: SourceEvidence::Structural,
             },
         };
         let index = FactIndex::build([f.clone()]);
