@@ -91,7 +91,10 @@ def applyQuery (req : ApplyRequest) : RequestM (RequestTask (OracleResult ApplyR
     match result with
     | .error e => return { failure := some e }
     | .ok (types, subgoal_types) =>
-      let subgoals ← types.mapM WithRpcRef.mk
+      let mut subgoals := #[]
+      for typeExpr in types do
+        let ref ← WithRpcRef.mk typeExpr
+        subgoals := subgoals.push ref
       return { value := some { subgoals, subgoal_types } }
 
 def elaborateQuery (req : ElaborateRequest) : RequestM (RequestTask (OracleResult ElaborateResponse)) :=
