@@ -156,8 +156,9 @@ def main() -> int:
                 "processId": None,
                 "clientInfo": {"name": "atlas-rpc-smoke", "version": "1"},
                 "rootUri": root.resolve().as_uri(),
-                "capabilities": {},
-                "initializationOptions": {"rpcWireFormat": "v1"},
+                "capabilities": {
+                    "lean": {"rpcWireFormat": "v1"}
+                },
             },
         )
         lsp.notify("initialized", {})
