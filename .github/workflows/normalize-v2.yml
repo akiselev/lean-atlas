@@ -1,0 +1,33 @@
+name: Normalize v2 branch
+
+on:
+  push:
+    branches: ["agent/lean-atlas-v2-rpc"]
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/lean-atlas-v2-rpc
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Normalize Rust workspace
+        run: |
+          cargo generate-lockfile
+          cargo fmt --all
+      - name: Commit generated lock and formatting
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Cargo.lock crates
+          git commit -m "chore: normalize v2 Rust workspace"
+          git push origin HEAD:agent/lean-atlas-v2-rpc
