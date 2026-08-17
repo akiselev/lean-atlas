@@ -12,7 +12,7 @@ use atlas_lean_protocol::{
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use thiserror::Error;
 
@@ -213,7 +213,11 @@ impl LeanServer {
             session,
             position,
             DEF_EQ_METHOD,
-            &DefEqRequest { position, lhs, rhs },
+            &DefEqRequest {
+                position,
+                lhs,
+                rhs,
+            },
         )
     }
 
@@ -262,8 +266,8 @@ impl LeanServer {
             let message = read_message(&mut self.stdout)?;
             if message.get("id").and_then(Value::as_u64) != Some(id) {
                 // Lean can publish diagnostics/progress while a request is outstanding. Those
-                // messages are intentionally ignored by this low-level semantic client; frontends
-                // that need them can add a notification sink without changing request ordering.
+                // messages are intentionally ignored by this low-level semantic client; a
+                // frontend can add a notification sink without changing request ordering.
                 continue;
             }
             if let Some(error) = message.get("error") {
