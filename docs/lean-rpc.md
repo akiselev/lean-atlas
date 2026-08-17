@@ -12,19 +12,31 @@ semantics from JSONL.
 
 ## Starting the server
 
-Build the plugin:
+Build the shared target:
 
 ```sh
 cd lean-server
 lake build AtlasServer:shared
 ```
 
-Run Lean's language server from the target project, passing the resulting shared library with
-the current Lean plugin syntax:
+Lake's shared facet names its artifact after the package and target, but `lean --plugin`
+derives the initializer it calls from the shared-library basename. Those names are not
+identical for the dotted root module `Atlas.Server`. Prepare a loadable copy whose basename is
+derived from the initializer actually exported by Lake:
 
-```text
-lake env lean --server --plugin=/absolute/path/to/libAtlasServer.so
+```sh
+plugin="$(bash prepare-plugin.sh .lake/build .lake/plugin)"
 ```
+
+Then start the target project's language server with that prepared library:
+
+```sh
+lake env lean --server --plugin="$plugin"
+```
+
+`prepare-plugin.sh` does not relink or modify the plugin; it verifies/discovers the exported
+`Atlas.Server` root initializer and copies the same shared-library bytes under the basename
+Lean maps back to that initializer. CI exercises this exact path end-to-end.
 
 The Rust client deliberately accepts a caller-configured `std::process::Command`; it does not
 assume where the plugin was materialized or which Lake project should supply the environment.
@@ -50,8 +62,11 @@ persist an RPC reference as corpus identity.
 - `Atlas.Server.whnf`
 - `Atlas.Server.defEq`
 
-`lookupDeclaration` returns the declaration's type as a Lean `WithRpcRef Expr`; subsequent
-operations consume that reference without serializing the full expression into Rust.
+`lookupDeclaration` returns the declaration's type as a `WithRpcRef ExprHandle`. `ExprHandle`
+is an Atlas-owned wrapper around Lean's `Expr` that derives `TypeName`, allowing Lean's RPC
+object store to type-check remote references without installing a global `TypeName Expr`
+instance. Subsequent operations consume the opaque reference without serializing the full
+expression into Rust.
 
 `inferType`, `whnf`, and `defEq` execute in the chosen file snapshot using Lean's own `MetaM`.
 They therefore respect the actual environment/options at that snapshot instead of an Atlas
@@ -60,3 +75,19 @@ approximation.
 The v1 operations intentionally work with global/closed expression refs. Source-local terms,
 metavariables, tactic states, and `InfoTree` contexts are the next RPC layer and will carry their
 own context handles rather than pretending an `Expr` alone is sufficient.
+
+## Acceptance smoke
+
+`scripts/lean-rpc-smoke.py` is intentionally independent of the Rust client. CI uses it to:
+
+1. launch a real `lean --server` process with the prepared plugin;
+2. initialize LSP and open a Lean file;
+3. connect a Lean RPC session;
+4. call the Atlas handshake;
+5. look up a declaration and receive its remote type handle;
+6. reuse that handle through `usedConstants`, `inferType`, `whnf`, and `defEq`;
+7. release all remote handles; and
+8. shut the server down cleanly.
+
+This separates plugin/runtime validation from Rust-client unit tests and catches packaging,
+loader, RPC-reference, and file-snapshot failures that compilation alone cannot detect.
