@@ -1,7 +1,4 @@
-//! Index and query engine for the Atlas (atlas.md).
-//!
-//! Build order per atlas.md §5: dependency graph first, consuming JSONL rows
-//! from the Lean-side extractor (atlas.md §6, Channel 2).
+//! Compatibility facade for the Atlas v1 indexes plus v2 contracts.
 
 pub mod artifact;
 pub mod dict;
@@ -13,6 +10,9 @@ pub mod intuition_concept;
 pub mod intuition_viewpoint;
 pub mod json;
 pub mod logical;
-pub mod relation;
 pub mod skel;
 pub mod statement;
+
+/// v2 owns the relation registry in `atlas-schema`; the old facade reexports it so existing
+/// callers keep the `atlas::relation::*` path while parallel enum/parser registries disappear.
+pub use atlas_schema::relation;
