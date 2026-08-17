@@ -1,0 +1,22 @@
+name: Lean server
+
+on:
+  push:
+    branches: [master, "agent/**"]
+  pull_request:
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan
+        run: curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y
+      - name: Build Atlas server plugin
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          cd lean-server
+          lake build AtlasServer:shared
+      - name: Locate shared plugin
+        run: |
+          test -n "$(find lean-server/.lake/build -type f \( -name 'libAtlasServer.so' -o -name 'libAtlasServer.dylib' -o -name 'AtlasServer.dll' \) -print -quit)"
