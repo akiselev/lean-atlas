@@ -36,3 +36,9 @@ jobs:
           test: false
           lint: false
           use-mathlib-cache: false
+      - name: Smoke live Lean RPC transport and expression handles
+        shell: bash
+        run: |
+          plugin="$(find "$PWD/lean-server/.lake/build" -type f \( -name 'libAtlasServer.so' -o -name 'AtlasServer.so' \) -print -quit)"
+          test -n "$plugin"
+          python3 scripts/lean-rpc-smoke.py "$plugin"
