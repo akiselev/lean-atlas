@@ -39,6 +39,12 @@ jobs:
       - name: Smoke live Lean RPC transport and expression handles
         shell: bash
         run: |
-          plugin="$(find "$PWD/lean-server/.lake/build" -type f \( -name 'libAtlasServer.so' -o -name 'AtlasServer.so' \) -print -quit)"
-          test -n "$plugin"
+          build="$PWD/lean-server/.lake/build"
+          plugin="$(find "$build" -type f \( -name '*.so' -o -name '*.dylib' -o -name '*.dll' \) -print -quit)"
+          if [ -z "$plugin" ]; then
+            echo "Lake shared build did not emit a loadable library; build tree follows" >&2
+            find "$build" -maxdepth 5 -type f -print >&2
+            exit 1
+          fi
+          echo "Using Atlas Lean plugin: $plugin"
           python3 scripts/lean-rpc-smoke.py "$plugin"
