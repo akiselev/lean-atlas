@@ -8,14 +8,17 @@ private def oracleOf (value : Except LeanFailure α) : OracleResult α :=
   | .ok x => { value := some x }
   | .error e => { failure := some e }
 
+private def parseDeclName (name : String) : Name :=
+  name.splitOn "." |>.foldl (fun acc part => Name.str acc part) Name.anonymous
+
 private def lookupDeclCore (name : String) : CoreM (Except LeanFailure (Name × Expr × Expr)) :=
   captureMeta "unknown_declaration" do
-    let n := Name.fromString name
+    let n := parseDeclName name
     let env ← getEnv
     unless env.contains n do
       throwError "unknown declaration '{n}'"
     let expr ← instantiateMVars (← mkConstWithFreshMVarLevels n)
-    let typeExpr ← instantiateMVars (← inferType expr)
+    let typeExpr ← instantiateMVars (← Meta.inferType expr)
     return (n, expr, typeExpr)
 
 def lookupDecl (req : LookupDeclRequest) : RequestM (RequestTask (OracleResult LookupDeclResponse)) :=
@@ -32,11 +35,13 @@ def lookupDecl (req : LookupDeclRequest) : RequestM (RequestTask (OracleResult L
 def getType (req : ExprRequest) : RequestM (RequestTask (OracleResult ExprResponse)) :=
   RequestM.withWaitFindSnapAtPos req.position fun snap => do
     let result ← RequestM.runCoreM snap <| captureMeta "type_mismatch" do
-      let e ← instantiateMVars (← inferType req.expr.val)
+      let e ← instantiateMVars (← Meta.inferType req.expr.val)
       return (e, ← prettyExpr e)
     match result with
     | .error e => return { failure := some e }
-    | .ok (expr, pretty) => return { value := some { expr := ← WithRpcRef.mk expr, pretty } }
+    | .ok (expr, pretty) =>
+      let exprRef ← WithRpcRef.mk expr
+      return { value := some { expr := exprRef, pretty } }
 
 def inferType := getType
 
@@ -47,7 +52,9 @@ def whnfQuery (req : ExprRequest) : RequestM (RequestTask (OracleResult ExprResp
       return (e, ← prettyExpr e)
     match result with
     | .error e => return { failure := some e }
-    | .ok (expr, pretty) => return { value := some { expr := ← WithRpcRef.mk expr, pretty } }
+    | .ok (expr, pretty) =>
+      let exprRef ← WithRpcRef.mk expr
+      return { value := some { expr := exprRef, pretty } }
 
 def defEq (req : PairRequest) : RequestM (RequestTask (OracleResult BoolResponse)) :=
   RequestM.withWaitFindSnapAtPos req.position fun snap => do
@@ -69,14 +76,16 @@ def synthInstanceQuery (req : SynthInstanceRequest) : RequestM (RequestTask (Ora
     match result with
     | .error e => return { failure := some e }
     | .ok (inst, dependencies, pretty) =>
-      return { value := some { «instance» := ← WithRpcRef.mk inst, dependencies, pretty } }
+      let instRef ← WithRpcRef.mk inst
+      return { value := some { «instance» := instRef, dependencies, pretty } }
 
 def applyQuery (req : ApplyRequest) : RequestM (RequestTask (OracleResult ApplyResponse)) :=
   RequestM.withWaitFindSnapAtPos req.position fun snap => do
     let result ← RequestM.runCoreM snap <| captureMeta "unification" do
       let goal ← mkFreshExprMVar req.goal_type.val
       let goals ← goal.mvarId!.apply req.candidate.val
-      let types ← goals.toArray.mapM fun g => instantiateMVars (← g.getType)
+      let types ← goals.toArray.mapM fun g => do
+        instantiateMVars (← g.getType)
       let rendered ← types.mapM prettyExpr
       return (types, rendered)
     match result with
@@ -93,19 +102,28 @@ def elaborateQuery (req : ElaborateRequest) : RequestM (RequestTask (OracleResul
         let expr ← elabTerm stx (req.expected.map (·.val))
         synthesizeSyntheticMVarsNoPostponing
         let expr ← instantiateMVars expr
-        let typeExpr ← instantiateMVars (← inferType expr)
+        let typeExpr ← instantiateMVars (← Meta.inferType expr)
         return Except.ok (expr, typeExpr, ← prettyExpr expr, ← prettyExpr typeExpr)
       catch ex =>
         return Except.error { kind := "elaboration", message := ← ex.toMessageData.toString }
     match result with
     | .error e => return { failure := some e }
     | .ok (expr, typeExpr, pretty, type_pretty) =>
-      return { value := some { expr := ← WithRpcRef.mk expr, type_expr := ← WithRpcRef.mk typeExpr, pretty, type_pretty } }
+      let exprRef ← WithRpcRef.mk expr
+      let typeRef ← WithRpcRef.mk typeExpr
+      return {
+        value := some {
+          expr := exprRef
+          type_expr := typeRef
+          pretty
+          type_pretty
+        }
+      }
 
 def checkProofQuery (req : CheckProofRequest) : RequestM (RequestTask (OracleResult BoolResponse)) :=
   RequestM.withWaitFindSnapAtPos req.position fun snap => do
     let result ← RequestM.runCoreM snap <| captureMeta "invalid_proof" do
-      let proofType ← inferType req.proof.val
+      let proofType ← Meta.inferType req.proof.val
       let saved ← saveState
       let ok ← isDefEq proofType req.proposition.val
       saved.restore
