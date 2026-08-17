@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - name: Install elan
         run: curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y
       - name: Build Atlas server plugin
@@ -40,3 +41,20 @@ jobs:
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
           python3 lean-server/tests/rpc_smoke.py "$(command -v lean)" "${{ steps.plugin.outputs.plugin }}"
+      - name: Live typed Rust client smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.elan/bin:$PATH"
+          workdir="$(realpath lean-server)"
+          fixture="$(realpath lean-server/Fixtures/RpcSmoke.lean)"
+          root_uri="$(python3 -c 'import pathlib; print(pathlib.Path("lean-server").resolve().as_uri())')"
+          fixture_uri="$(python3 -c 'import pathlib; print(pathlib.Path("lean-server/Fixtures/RpcSmoke.lean").resolve().as_uri())')"
+          ATLAS_RUN_LIVE_LEAN_RPC=1 \
+          ATLAS_LEAN_BIN="$(command -v lean)" \
+          ATLAS_LEAN_PLUGIN="${{ steps.plugin.outputs.plugin }}" \
+          ATLAS_LEAN_FIXTURE="$fixture" \
+          ATLAS_LEAN_WORKDIR="$workdir" \
+          ATLAS_LEAN_ROOT_URI="$root_uri" \
+          ATLAS_LEAN_FIXTURE_URI="$fixture_uri" \
+            cargo test -p atlas-lean-client --test live_rpc -- --nocapture
