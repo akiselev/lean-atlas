@@ -1,0 +1,10 @@
+[package]
+name = "atlas-lean-protocol"
+description = "Versioned wire contracts for the Lean Atlas semantic RPC service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

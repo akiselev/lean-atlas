@@ -1,4 +1,4 @@
-name: Rust
+name: Rust and Lean RPC
 
 on:
   push:
@@ -6,14 +6,33 @@ on:
   pull_request:
 
 jobs:
-  atlas:
+  rust:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Test Atlas engine
-        run: cargo test -p atlas
+      - name: Test Atlas workspace foundations
+        run: >-
+          cargo test
+          -p atlas-schema
+          -p atlas-store
+          -p atlas-logic
+          -p atlas-lean-protocol
+          -p atlas-lean-client
+          -p atlas
       - name: Format
         run: cargo fmt --all -- --check
+
+  lean-rpc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: lean-server
+          build: true
+          test: false
+          lint: false
+          use-mathlib-cache: false

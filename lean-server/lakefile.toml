@@ -1,0 +1,8 @@
+name = "atlasServer"
+version = "0.1.0"
+defaultTargets = ["AtlasServer"]
+
+[[lean_lib]]
+name = "AtlasServer"
+roots = ["Atlas.Server"]
+defaultFacets = ["shared"]
