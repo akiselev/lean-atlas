@@ -13,7 +13,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Test Atlas engine
-        run: cargo test -p atlas
+      - name: Dependency layering
+        run: python scripts/check-deps.py
+      - name: Test v2 workspace
+        run: cargo test --workspace --exclude atlas-py
+      - name: Check Python binding crate
+        run: cargo check -p atlas-py
       - name: Format
         run: cargo fmt --all -- --check
