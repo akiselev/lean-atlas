@@ -41,6 +41,51 @@ proptest! {
 }
 
 #[test]
+fn heuristic_support_cannot_be_upgraded_by_derivation() {
+    let edge = RelationTypeId(1);
+    let reach = RelationTypeId(2);
+    let source = MemoryFacts::new(vec![FactRow {
+        id: FactId(1),
+        relation: edge,
+        args: vec![Value::Integer(1), Value::Integer(2)],
+        warrant: FactWarrant::Heuristic,
+        provenance: Provenance::Source {
+            source: "numerical-fit".into(),
+            evidence: SourceEvidence::Numerical,
+        },
+    }]);
+    let program = Program {
+        rules: vec![Rule {
+            id: "reach.base".into(),
+            head: atom(reach, v("x"), v("y")),
+            body: vec![Literal::Pos(atom(edge, v("x"), v("y")))],
+        }],
+    };
+    let query = Query {
+        project: vec!["x".into(), "y".into()],
+        body: vec![Literal::Pos(atom(reach, v("x"), v("y")))],
+        limit: None,
+    };
+    let opts = EvalOptions::default();
+    let reference = evaluate_reference(&source, &program, &query, opts).unwrap();
+    let optimized = evaluate_optimized(
+        &source,
+        &program,
+        &query,
+        opts,
+        &CancellationToken::default(),
+    )
+    .unwrap();
+    assert_eq!(optimized, reference);
+    let derived = reference
+        .facts
+        .iter()
+        .find(|fact| fact.relation == reach)
+        .expect("reach fact");
+    assert_eq!(derived.warrant, FactWarrant::Heuristic);
+}
+
+#[test]
 fn optimized_honors_cancellation() {
     let token = CancellationToken::default();
     token.cancel();
