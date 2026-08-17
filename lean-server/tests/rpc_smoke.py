@@ -100,7 +100,7 @@ def rpc_call(
     lsp: Lsp,
     *,
     uri: str,
-    session_id: int,
+    session_id: int | str,
     method: str,
     params: dict[str, Any],
     position: dict[str, int],
@@ -175,7 +175,7 @@ def main() -> int:
 
         connected = lsp.request("$/lean/rpc/connect", {"uri": uri})
         session_id = connected["sessionId"]
-        assert isinstance(session_id, int)
+        assert isinstance(session_id, (int, str)), connected
 
         hello = rpc_call(
             lsp,
