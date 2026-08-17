@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, fmt};
 
-pub const SCHEMA_VERSION:u32=2;
+pub const SCHEMA_VERSION: u32 = 2;
 
-#[derive(Clone,Copy,Debug,PartialEq,Eq,PartialOrd,Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Warrant { Proved, Structural, Asserted, Heuristic }
 
 macro_rules! relations {
@@ -10,7 +10,7 @@ macro_rules! relations {
         #[derive(Clone,Copy,Debug,PartialEq,Eq,PartialOrd,Ord,Hash)]
         pub enum RelationKind { $($v),+ }
         impl RelationKind {
-            pub const ALL:&'static [RelationKind]=&[$(RelationKind::$v),+];
+            pub const ALL: [RelationKind; 17] = [$(RelationKind::$v),+];
             pub const fn as_str(self)->&'static str { match self {$(Self::$v=>$wire),+} }
             pub fn parse(s:&str)->Option<Self>{match s {$($wire=>Some(Self::$v),)+_=>None}}
             pub const fn warrant(self)->Warrant{match self {$(Self::$v=>Warrant::$w),+}}
@@ -20,28 +20,28 @@ macro_rules! relations {
 }
 
 relations! {
-    ExactStatement => ("exact_statement",Structural,true),
-    PresentationEqual => ("presentation_equal",Structural,true),
-    DefinitionalRewrite => ("definitional_rewrite",Proved,true),
-    ProvedIff => ("proved_iff",Proved,true),
-    ProvedImplies => ("proved_implies",Proved,false),
-    TypeEquiv => ("type_equiv",Proved,true),
-    SharedInstance => ("shared_instance",Structural,true),
-    SharedHomeCandidate => ("shared_home_candidate",Heuristic,true),
-    SharedHomeConfirmed => ("shared_home_confirmed",Structural,true),
-    StructuralAnalogy => ("structural_analogy",Heuristic,true),
-    ProofShapeAnalogy => ("proof_shape_analogy",Heuristic,true),
-    DictionaryRowCandidate => ("dictionary_row_candidate",Heuristic,true),
-    DictionaryRowConfirmed => ("dictionary_row_confirmed",Structural,true),
-    TransportRefuted => ("transport_refuted",Proved,false),
-    TransportProved => ("transport_proved",Proved,false),
-    AssertedIff => ("asserted_iff",Asserted,true),
-    AssertedImplies => ("asserted_implies",Asserted,false),
+    ExactStatement => ("ExactStatement",Structural,true),
+    PresentationEqual => ("PresentationEqual",Structural,true),
+    DefinitionalRewrite => ("DefinitionalRewrite",Structural,true),
+    ProvedIff => ("ProvedIff",Proved,true),
+    ProvedImplies => ("ProvedImplies",Proved,false),
+    TypeEquiv => ("TypeEquiv",Structural,true),
+    SharedInstance => ("SharedInstance",Structural,true),
+    SharedHomeCandidate => ("SharedHomeCandidate",Heuristic,true),
+    SharedHomeConfirmed => ("SharedHomeConfirmed",Proved,true),
+    StructuralAnalogy => ("StructuralAnalogy",Heuristic,true),
+    ProofShapeAnalogy => ("ProofShapeAnalogy",Heuristic,true),
+    DictionaryRowCandidate => ("DictionaryRowCandidate",Heuristic,true),
+    DictionaryRowConfirmed => ("DictionaryRowConfirmed",Proved,true),
+    TransportRefuted => ("TransportRefuted",Proved,false),
+    TransportProved => ("TransportProved",Proved,false),
+    AssertedIff => ("AssertedIff",Asserted,true),
+    AssertedImplies => ("AssertedImplies",Asserted,false),
 }
 
 impl fmt::Display for RelationKind { fn fmt(&self,f:&mut fmt::Formatter<'_>)->fmt::Result{f.write_str(self.as_str())} }
 
-#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+#[derive(Clone,Copy,Debug,PartialEq,Eq,PartialOrd,Ord,Hash)]
 pub enum Direction { Both, LeftToRight, RightToLeft }
 impl Direction { pub const fn as_str(self)->&'static str{match self{Self::Both=>"both",Self::LeftToRight=>"left_to_right",Self::RightToLeft=>"right_to_left"}} }
 
@@ -49,7 +49,7 @@ impl Direction { pub const fn as_str(self)->&'static str{match self{Self::Both=>
 pub enum Evidence {
     LeanTheorem{name:String},
     CanonicalEq{level:&'static str},
-    AntiUnification{skeleton:String,common:usize,retention:f32},
+    AntiUnification{skeleton:String,common:u32,retention:f32},
     DependencyPath{path:Vec<String>},
     RankingFeatures{features:BTreeMap<String,f32>},
     Counterexample{witness:String},
@@ -81,7 +81,10 @@ pub enum RelationError {
     InsufficientEvidence{kind:RelationKind,needs:Warrant,evidence:&'static str,supports:Warrant},
     DirectionMismatch{kind:RelationKind,direction:Direction},
 }
-impl fmt::Display for RelationError{fn fmt(&self,f:&mut fmt::Formatter<'_>)->fmt::Result{write!(f,"invalid Atlas relation: {self:?}")}}
+impl fmt::Display for RelationError{fn fmt(&self,f:&mut fmt::Formatter<'_>)->fmt::Result{match self{
+    Self::InsufficientEvidence{kind,needs,evidence,supports}=>write!(f,"`{kind}` is {needs:?} but evidence `{evidence}` only supports {supports:?}"),
+    Self::DirectionMismatch{kind,direction}=>write!(f,"`{kind}` direction mismatch: {}",direction.as_str()),
+}}}
 impl std::error::Error for RelationError{}
 
 #[derive(Clone,Debug,PartialEq)]
@@ -103,6 +106,6 @@ impl Relation {
 
 #[cfg(test)]
 mod tests{use super::*;
-    #[test]fn every_kind_round_trips(){for k in RelationKind::ALL{assert_eq!(RelationKind::parse(k.as_str()),Some(*k));}assert_eq!(RelationKind::ALL.len(),17);}
-    #[test]fn asserted_variants_are_in_registry(){assert_eq!(RelationKind::parse("asserted_iff"),Some(RelationKind::AssertedIff));assert_eq!(RelationKind::parse("asserted_implies"),Some(RelationKind::AssertedImplies));}
+    #[test]fn every_kind_round_trips(){for k in RelationKind::ALL{assert_eq!(RelationKind::parse(k.as_str()),Some(k));}assert_eq!(RelationKind::ALL.len(),17);}
+    #[test]fn asserted_variants_are_in_registry(){assert_eq!(RelationKind::parse("AssertedIff"),Some(RelationKind::AssertedIff));assert_eq!(RelationKind::parse("AssertedImplies"),Some(RelationKind::AssertedImplies));}
 }
