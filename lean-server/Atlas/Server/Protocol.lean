@@ -86,7 +86,7 @@ structure SynthInstanceRequest where
   deriving RpcEncodable
 
 structure SynthInstanceResponse where
-  instance : WithRpcRef Lean.Expr
+  «instance» : WithRpcRef Lean.Expr
   dependencies : Array String
   pretty : String
   deriving RpcEncodable
