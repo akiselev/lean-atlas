@@ -3,8 +3,8 @@ import Lean.Server.Rpc
 namespace Atlas.Server
 open Lean Server
 
-unsafe instance : TypeName Name := TypeName.mk Name ``Name
-unsafe instance : TypeName Expr := TypeName.mk Expr ``Expr
+unsafe instance : TypeName Lean.Name := TypeName.mk Lean.Name ``Lean.Name
+unsafe instance : TypeName Lean.Expr := TypeName.mk Lean.Expr ``Lean.Expr
 
 structure HelloRequest where
   atlas_protocol : String
@@ -49,25 +49,25 @@ structure LookupDeclRequest where
   deriving RpcEncodable
 
 structure LookupDeclResponse where
-  declaration : WithRpcRef Name
-  expression : WithRpcRef Expr
-  type_expr : WithRpcRef Expr
+  declaration : WithRpcRef Lean.Name
+  expression : WithRpcRef Lean.Expr
+  type_expr : WithRpcRef Lean.Expr
   name : String
   deriving RpcEncodable
 
 structure ExprRequest where
-  expr : WithRpcRef Expr
+  expr : WithRpcRef Lean.Expr
   position : Lsp.Position
   deriving RpcEncodable
 
 structure ExprResponse where
-  expr : WithRpcRef Expr
+  expr : WithRpcRef Lean.Expr
   pretty : String
   deriving RpcEncodable
 
 structure PairRequest where
-  lhs : WithRpcRef Expr
-  rhs : WithRpcRef Expr
+  lhs : WithRpcRef Lean.Expr
+  rhs : WithRpcRef Lean.Expr
   position : Lsp.Position
   deriving RpcEncodable
 
@@ -76,48 +76,48 @@ structure BoolResponse where
   deriving RpcEncodable
 
 structure SynthInstanceRequest where
-  type_expr : WithRpcRef Expr
+  type_expr : WithRpcRef Lean.Expr
   position : Lsp.Position
   deriving RpcEncodable
 
 structure SynthInstanceResponse where
-  instance : WithRpcRef Expr
+  instance : WithRpcRef Lean.Expr
   dependencies : Array String
   pretty : String
   deriving RpcEncodable
 
 structure ApplyRequest where
-  candidate : WithRpcRef Expr
-  goal_type : WithRpcRef Expr
+  candidate : WithRpcRef Lean.Expr
+  goal_type : WithRpcRef Lean.Expr
   position : Lsp.Position
   deriving RpcEncodable
 
 structure ApplyResponse where
-  subgoals : Array (WithRpcRef Expr)
+  subgoals : Array (WithRpcRef Lean.Expr)
   subgoal_types : Array String
   deriving RpcEncodable
 
 structure ElaborateRequest where
   text : String
-  expected : Option (WithRpcRef Expr)
+  expected : Option (WithRpcRef Lean.Expr)
   position : Lsp.Position
   deriving RpcEncodable
 
 structure ElaborateResponse where
-  expr : WithRpcRef Expr
-  type_expr : WithRpcRef Expr
+  expr : WithRpcRef Lean.Expr
+  type_expr : WithRpcRef Lean.Expr
   pretty : String
   type_pretty : String
   deriving RpcEncodable
 
 structure CheckProofRequest where
-  proof : WithRpcRef Expr
-  proposition : WithRpcRef Expr
+  proof : WithRpcRef Lean.Expr
+  proposition : WithRpcRef Lean.Expr
   position : Lsp.Position
   deriving RpcEncodable
 
 structure BatchDefEqRequest where
-  pairs : Array (WithRpcRef Expr × WithRpcRef Expr)
+  pairs : Array (WithRpcRef Lean.Expr × WithRpcRef Lean.Expr)
   position : Lsp.Position
   deriving RpcEncodable
 
