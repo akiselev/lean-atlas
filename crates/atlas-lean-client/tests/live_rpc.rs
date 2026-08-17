@@ -1,8 +1,8 @@
 use atlas_lean_client::{ClientError, LeanClient, LeanCommand};
 use atlas_lean_protocol::{
-    BoolResponse, DefEqRequest, ElaborateRequest, ElaborateResponse, ExprRequest, ExprResponse,
-    HelloRequest, HelloResponse, LookupDeclRequest, LookupDeclResponse, OracleResult, Position,
-    ELABORATE, HELLO, INFER_TYPE, IS_DEFEQ, LOOKUP_DECL, PROTOCOL_VERSION,
+    BoolResponse, DefEqRequest, ELABORATE, ElaborateRequest, ElaborateResponse, ExprRequest,
+    ExprResponse, HELLO, HelloRequest, HelloResponse, INFER_TYPE, IS_DEFEQ, LOOKUP_DECL,
+    LookupDeclRequest, LookupDeclResponse, OracleResult, PROTOCOL_VERSION, Position,
 };
 use std::{env, fs, path::PathBuf};
 
