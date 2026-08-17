@@ -1,8 +1,30 @@
 [workspace]
 resolver = "2"
-members = ["crates/atlas", "crates/atlas-py"]
+members = [
+  "crates/atlas-schema",
+  "crates/atlas-index",
+  "crates/atlas-store",
+  "crates/atlas-logic",
+  "crates/atlas-lean-protocol",
+  "crates/atlas-lean-client",
+  "crates/atlas-engine",
+  "crates/atlas",
+  "crates/atlas-py",
+]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
+
+[workspace.dependencies]
+atlas-schema = { path = "crates/atlas-schema" }
+atlas-index = { path = "crates/atlas-index" }
+atlas-store = { path = "crates/atlas-store" }
+atlas-logic = { path = "crates/atlas-logic" }
+atlas-lean-protocol = { path = "crates/atlas-lean-protocol" }
+atlas-lean-client = { path = "crates/atlas-lean-client" }
+atlas-engine = { path = "crates/atlas-engine" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"

@@ -1,0 +1,21 @@
+pub const V1: &str = r#"
+CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS entities(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,canonical_name TEXT);
+CREATE TABLE IF NOT EXISTS declarations(id INTEGER PRIMARY KEY,entity_id INTEGER,lean_name TEXT NOT NULL,module TEXT);
+CREATE TABLE IF NOT EXISTS entity_aliases(entity_id INTEGER NOT NULL,alias TEXT NOT NULL,UNIQUE(entity_id,alias));
+CREATE TABLE IF NOT EXISTS relation_types(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE,arity INTEGER NOT NULL,execution TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS facts(id INTEGER PRIMARY KEY,relation_id INTEGER NOT NULL,warrant TEXT NOT NULL,provenance_json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS fact_args(fact_id INTEGER NOT NULL,position INTEGER NOT NULL,value_json TEXT NOT NULL,PRIMARY KEY(fact_id,position));
+CREATE INDEX IF NOT EXISTS facts_by_relation ON facts(relation_id,id);
+CREATE TABLE IF NOT EXISTS evidence(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,payload_json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS fact_evidence(fact_id INTEGER NOT NULL,evidence_id INTEGER NOT NULL,PRIMARY KEY(fact_id,evidence_id));
+CREATE TABLE IF NOT EXISTS origins(id INTEGER PRIMARY KEY,authority TEXT NOT NULL,locator TEXT,digest TEXT);
+CREATE TABLE IF NOT EXISTS oracle_receipts(id INTEGER PRIMARY KEY,environment_id INTEGER NOT NULL,operation TEXT NOT NULL,request_json TEXT NOT NULL,response_json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS artifact_links(id INTEGER PRIMARY KEY,fact_id INTEGER,authority TEXT NOT NULL,artifact_id TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS statement_fingerprints(declaration_id INTEGER PRIMARY KEY,fingerprint TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS proof_fingerprints(declaration_id INTEGER PRIMARY KEY,fingerprint TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS module_versions(module TEXT PRIMARY KEY,environment_id INTEGER NOT NULL,digest TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS experiments(id INTEGER PRIMARY KEY,external_id TEXT,payload_json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS assays(id INTEGER PRIMARY KEY,external_id TEXT,payload_json TEXT NOT NULL);
+INSERT OR IGNORE INTO schema_migrations(version) VALUES(1);
+"#;
