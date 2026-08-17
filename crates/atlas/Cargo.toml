@@ -6,4 +6,5 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+atlas-schema = { path = "../atlas-schema" }
 sha2 = "0.11.0"
