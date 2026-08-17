@@ -113,6 +113,9 @@ mod tests {
             expr: current.clone(),
         };
         assert_eq!(serde_json::to_value(old_request).unwrap()["expr"], old);
-        assert_eq!(serde_json::to_value(current_request).unwrap()["expr"], current);
+        assert_eq!(
+            serde_json::to_value(current_request).unwrap()["expr"],
+            current
+        );
     }
 }

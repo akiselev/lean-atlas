@@ -5,7 +5,7 @@
 //! responsibility of the external artifact layer.
 
 use atlas_schema::{FactId, FactKey, RuleId, Value, Warrant};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;
@@ -174,9 +174,9 @@ impl Store {
     }
 
     pub fn facts_by_relation(&self, relation: &str) -> Result<Vec<StoredFact>> {
-        let mut statement = self.connection.prepare(
-            "SELECT id, tuple_json, warrant FROM facts WHERE relation = ?1 ORDER BY id",
-        )?;
+        let mut statement = self
+            .connection
+            .prepare("SELECT id, tuple_json, warrant FROM facts WHERE relation = ?1 ORDER BY id")?;
         let rows = statement.query_map([relation], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
@@ -198,12 +198,7 @@ impl Store {
         Ok(out)
     }
 
-    pub fn add_derivation(
-        &mut self,
-        fact: FactId,
-        rule: RuleId,
-        inputs: &[FactId],
-    ) -> Result<()> {
+    pub fn add_derivation(&mut self, fact: FactId, rule: RuleId, inputs: &[FactId]) -> Result<()> {
         let transaction = self.connection.transaction()?;
         for (ordinal, input) in inputs.iter().enumerate() {
             transaction.execute(
@@ -226,10 +221,9 @@ impl Store {
             "SELECT input_fact_id FROM derivations
              WHERE fact_id = ?1 AND rule_id = ?2 ORDER BY ordinal",
         )?;
-        let rows = statement.query_map(
-            params![fact.get() as i64, rule.get() as i64],
-            |row| row.get::<_, i64>(0),
-        )?;
+        let rows = statement.query_map(params![fact.get() as i64, rule.get() as i64], |row| {
+            row.get::<_, i64>(0)
+        })?;
         let mut out = Vec::new();
         for row in rows {
             out.push(FactId::new(row? as u64));
@@ -238,9 +232,9 @@ impl Store {
     }
 
     fn origins(&self, fact: FactId) -> Result<Vec<Origin>> {
-        let mut statement = self.connection.prepare(
-            "SELECT kind, payload_json FROM origins WHERE fact_id = ?1 ORDER BY id",
-        )?;
+        let mut statement = self
+            .connection
+            .prepare("SELECT kind, payload_json FROM origins WHERE fact_id = ?1 ORDER BY id")?;
         let rows = statement.query_map([fact.get() as i64], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
@@ -295,7 +289,10 @@ mod tests {
             .insert_fact(
                 &key,
                 Warrant::Structural,
-                Some(&Origin::new("canonical", serde_json::json!({"level": "l2"}))),
+                Some(&Origin::new(
+                    "canonical",
+                    serde_json::json!({"level": "l2"}),
+                )),
             )
             .unwrap();
         assert_eq!(first, second);
@@ -308,15 +305,30 @@ mod tests {
     fn derivation_inputs_preserve_order() {
         let mut store = Store::in_memory().unwrap();
         let a = store
-            .insert_fact(&FactKey::new("p", vec![Value::U64(1)]), Warrant::Structural, None)
+            .insert_fact(
+                &FactKey::new("p", vec![Value::U64(1)]),
+                Warrant::Structural,
+                None,
+            )
             .unwrap();
         let b = store
-            .insert_fact(&FactKey::new("p", vec![Value::U64(2)]), Warrant::Structural, None)
+            .insert_fact(
+                &FactKey::new("p", vec![Value::U64(2)]),
+                Warrant::Structural,
+                None,
+            )
             .unwrap();
         let c = store
-            .insert_fact(&FactKey::new("q", vec![Value::U64(3)]), Warrant::Structural, None)
+            .insert_fact(
+                &FactKey::new("q", vec![Value::U64(3)]),
+                Warrant::Structural,
+                None,
+            )
             .unwrap();
         store.add_derivation(c, RuleId::new(7), &[b, a]).unwrap();
-        assert_eq!(store.derivation_inputs(c, RuleId::new(7)).unwrap(), vec![b, a]);
+        assert_eq!(
+            store.derivation_inputs(c, RuleId::new(7)).unwrap(),
+            vec![b, a]
+        );
     }
 }

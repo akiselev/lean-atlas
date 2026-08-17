@@ -4,14 +4,14 @@
 //! issue small semantic requests. Large Lean expressions remain server-side as RPC refs.
 
 use atlas_lean_protocol::{
-    DefEqRequest, DefEqResponse, ExprRequest, ExprResponse, HelloRequest, HelloResponse,
-    LookupDeclarationRequest, LookupDeclarationResponse, Position, UsedConstantsResponse,
-    DEF_EQ_METHOD, HELLO_METHOD, INFER_TYPE_METHOD, LOOKUP_DECLARATION_METHOD, PROTOCOL_VERSION,
-    USED_CONSTANTS_METHOD, WHNF_METHOD,
+    DEF_EQ_METHOD, DefEqRequest, DefEqResponse, ExprRequest, ExprResponse, HELLO_METHOD,
+    HelloRequest, HelloResponse, INFER_TYPE_METHOD, LOOKUP_DECLARATION_METHOD,
+    LookupDeclarationRequest, LookupDeclarationResponse, PROTOCOL_VERSION, Position,
+    USED_CONSTANTS_METHOD, UsedConstantsResponse, WHNF_METHOD,
 };
-use serde::de::DeserializeOwned;
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use thiserror::Error;
@@ -111,7 +111,9 @@ impl LeanServer {
         let session_id = response
             .get("sessionId")
             .and_then(Value::as_u64)
-            .ok_or_else(|| ClientError::Protocol("RPC connect response omitted sessionId".into()))?;
+            .ok_or_else(|| {
+                ClientError::Protocol("RPC connect response omitted sessionId".into())
+            })?;
         Ok(RpcSession {
             uri: uri.to_owned(),
             session_id,
@@ -213,11 +215,7 @@ impl LeanServer {
             session,
             position,
             DEF_EQ_METHOD,
-            &DefEqRequest {
-                position,
-                lhs,
-                rhs,
-            },
+            &DefEqRequest { position, lhs, rhs },
         )
     }
 

@@ -31,18 +31,32 @@ impl Direction {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Evidence {
-    LeanTheorem { name: String },
-    CanonicalEq { level: &'static str },
+    LeanTheorem {
+        name: String,
+    },
+    CanonicalEq {
+        level: &'static str,
+    },
     AntiUnification {
         skeleton: String,
         common: u32,
         retention: f32,
     },
-    DependencyPath { path: Vec<String> },
-    RankingFeatures { features: BTreeMap<String, f32> },
-    Counterexample { witness: String },
-    LeanAxiom { name: String },
-    Unsupported { reason: UnsupportedReason },
+    DependencyPath {
+        path: Vec<String>,
+    },
+    RankingFeatures {
+        features: BTreeMap<String, f32>,
+    },
+    Counterexample {
+        witness: String,
+    },
+    LeanAxiom {
+        name: String,
+    },
+    Unsupported {
+        reason: UnsupportedReason,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -117,7 +131,11 @@ impl fmt::Display for RelationError {
             Self::DirectionMismatch { kind, direction } => write!(
                 f,
                 "`{kind}` is {} but was given direction `{}`",
-                if kind.is_symmetric() { "symmetric" } else { "directional" },
+                if kind.is_symmetric() {
+                    "symmetric"
+                } else {
+                    "directional"
+                },
                 direction.as_str()
             ),
         }
@@ -298,7 +316,10 @@ mod tests {
         for kind in RelationKind::ALL {
             assert_eq!(RelationKind::parse(kind.as_str()), Some(kind), "{kind}");
         }
-        assert_eq!(RelationKind::parse("AssertedIff"), Some(RelationKind::AssertedIff));
+        assert_eq!(
+            RelationKind::parse("AssertedIff"),
+            Some(RelationKind::AssertedIff)
+        );
         assert_eq!(
             RelationKind::parse("AssertedImplies"),
             Some(RelationKind::AssertedImplies)

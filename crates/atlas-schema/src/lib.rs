@@ -9,7 +9,17 @@ macro_rules! id_type {
     ($name:ident) => {
         #[repr(transparent)]
         #[derive(
-            Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+            Clone,
+            Copy,
+            Debug,
+            Default,
+            PartialEq,
+            Eq,
+            PartialOrd,
+            Ord,
+            Hash,
+            Serialize,
+            Deserialize,
         )]
         pub struct $name(pub u64);
 
@@ -257,9 +267,18 @@ mod tests {
 
     #[test]
     fn execution_class_is_not_warrant() {
-        assert_eq!(RelationKind::SharedHomeCandidate.execution(), RelationExecution::Candidate);
-        assert_eq!(RelationKind::SharedHomeCandidate.warrant(), Warrant::Heuristic);
-        assert_eq!(RelationKind::SharedHomeConfirmed.execution(), RelationExecution::Oracle);
+        assert_eq!(
+            RelationKind::SharedHomeCandidate.execution(),
+            RelationExecution::Candidate
+        );
+        assert_eq!(
+            RelationKind::SharedHomeCandidate.warrant(),
+            Warrant::Heuristic
+        );
+        assert_eq!(
+            RelationKind::SharedHomeConfirmed.execution(),
+            RelationExecution::Oracle
+        );
         assert_eq!(RelationKind::SharedHomeConfirmed.warrant(), Warrant::Proved);
     }
 }

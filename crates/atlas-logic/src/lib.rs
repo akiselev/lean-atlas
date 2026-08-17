@@ -149,21 +149,13 @@ impl Program {
                 .flat_map(atom_variables)
                 .collect::<BTreeSet<_>>();
 
-            ensure_terms_bound(
-                rule.id,
-                "head",
-                rule.head.terms.iter(),
-                &positive_vars,
-            )?;
+            ensure_terms_bound(rule.id, "head", rule.head.terms.iter(), &positive_vars)?;
 
             for clause in &rule.body {
                 match clause {
-                    Clause::Not(atom) => ensure_terms_bound(
-                        rule.id,
-                        "negation",
-                        atom.terms.iter(),
-                        &positive_vars,
-                    )?,
+                    Clause::Not(atom) => {
+                        ensure_terms_bound(rule.id, "negation", atom.terms.iter(), &positive_vars)?
+                    }
                     Clause::Eq(left, right) => {
                         ensure_terms_bound(
                             rule.id,
@@ -348,10 +340,7 @@ pub enum LogicError {
         location: &'static str,
     },
     #[error("equality compares incompatible types {left:?} and {right:?}")]
-    EqualityType {
-        left: ValueType,
-        right: ValueType,
-    },
+    EqualityType { left: ValueType, right: ValueType },
     #[error("program contains recursion through negation")]
     UnstratifiedNegation,
     #[error("fact for `{relation}` has arity {found}, expected {expected}")]
@@ -553,9 +542,7 @@ impl Evaluator for SemiNaiveEvaluator {
                         .iter()
                         .enumerate()
                         .filter_map(|(index, clause)| match clause {
-                            Clause::Atom(atom)
-                                if validated.strata[&atom.relation] == stratum =>
-                            {
+                            Clause::Atom(atom) if validated.strata[&atom.relation] == stratum => {
                                 Some(index)
                             }
                             Clause::Atom(_) | Clause::Not(_) | Clause::Eq(_, _) => None,
@@ -707,12 +694,7 @@ fn insert_derived(
     changed
 }
 
-fn record_derivation(
-    evaluation: &mut Evaluation,
-    rule: &Rule,
-    tuple: Tuple,
-    inputs: Vec<FactKey>,
-) {
+fn record_derivation(evaluation: &mut Evaluation, rule: &Rule, tuple: Tuple, inputs: Vec<FactKey>) {
     let height = inputs
         .iter()
         .filter_map(|input| evaluation.derivations.get(input))
@@ -760,14 +742,8 @@ mod tests {
             id: RuleId::new(2),
             head: Atom::new("path", vec![Term::var("x"), Term::var("z")]),
             body: vec![
-                Clause::Atom(Atom::new(
-                    "path",
-                    vec![Term::var("x"), Term::var("y")],
-                )),
-                Clause::Atom(Atom::new(
-                    "edge",
-                    vec![Term::var("y"), Term::var("z")],
-                )),
+                Clause::Atom(Atom::new("path", vec![Term::var("x"), Term::var("y")])),
+                Clause::Atom(Atom::new("edge", vec![Term::var("y"), Term::var("z")])),
             ],
         });
         program
@@ -788,9 +764,11 @@ mod tests {
         let reference = ReferenceEvaluator.evaluate(&program, &seed).unwrap();
         let optimized = SemiNaiveEvaluator.evaluate(&program, &seed).unwrap();
         assert_eq!(reference.facts, optimized.facts);
-        assert!(optimized
-            .facts
-            .contains("path", &[Value::U64(1), Value::U64(4)]));
+        assert!(
+            optimized
+                .facts
+                .contains("path", &[Value::U64(1), Value::U64(4)])
+        );
     }
 
     #[test]
