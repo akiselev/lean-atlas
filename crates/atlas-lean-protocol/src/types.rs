@@ -116,7 +116,10 @@ mod tests {
     #[test]
     fn rpc_ref_uses_lean_string_bignum_wire_format() {
         let rpc_ref = RpcRef { id: 42 };
-        assert_eq!(serde_json::to_value(rpc_ref).unwrap(), json!({"__rpcref":"42"}));
+        assert_eq!(
+            serde_json::to_value(rpc_ref).unwrap(),
+            json!({"__rpcref":"42"})
+        );
         assert_eq!(
             serde_json::from_value::<RpcRef>(json!({"__rpcref":"42"})).unwrap(),
             rpc_ref
