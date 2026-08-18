@@ -6,8 +6,7 @@ license.workspace = true
 
 [dependencies]
 atlas-daemon-protocol.workspace = true
-atlas-lean-client.workspace = true
-atlas-store.workspace = true
+atlas-engine.workspace = true
 daemonkit.workspace = true
 futures-util = "0.3"
 serde.workspace = true
