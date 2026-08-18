@@ -1,3 +1,5 @@
+pub mod runtime;
+
 use atlas_lean_client::{ClientError, LeanClient};
 use atlas_lean_protocol as protocol;
 use atlas_logic::{FactSource, LogicError};
