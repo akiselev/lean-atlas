@@ -361,11 +361,19 @@ impl ServiceState {
                 format!("document {} is not open", request.uri),
             ));
         }
+        let next_uri = project.overlays.keys().next().cloned();
         if let Some(lean) = project.lean.as_mut() {
             if let Err(error) = lean.close_document(request.uri).await {
                 return Err(project
                     .recover_from_lean_failure(error, &daemon_generation)
                     .await);
+            }
+            if let Some(next_uri) = next_uri {
+                if let Err(error) = lean.select_document(next_uri).await {
+                    return Err(project
+                        .recover_from_lean_failure(error, &daemon_generation)
+                        .await);
+                }
             }
         }
         Ok(ResponsePayload::Project(
