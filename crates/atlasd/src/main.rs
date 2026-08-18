@@ -36,18 +36,36 @@ struct ProjectSession {
 }
 
 impl ProjectSession {
-    async fn start(config: ProjectConfig, generation: u64) -> Self {
-        let mut session = Self {
+    fn new(config: ProjectConfig, generation: u64) -> Self {
+        Self {
             config,
             generation,
             client: None,
             overlay: None,
             last_error: None,
-        };
-        if let Err(error) = session.spawn_lean().await {
-            session.last_error = Some(error);
         }
-        session
+    }
+
+    async fn ensure_started(&mut self) {
+        if self.client.is_some() {
+            return;
+        }
+        if let Err(error) = self.spawn_lean().await {
+            self.last_error = Some(error);
+        }
+    }
+
+    async fn reconfigure(&mut self, config: ProjectConfig) {
+        if self.config == config {
+            self.ensure_started().await;
+            return;
+        }
+        if let Some(client) = self.client.take() {
+            let _ = tokio::time::timeout(Duration::from_secs(2), client.shutdown()).await;
+        }
+        self.config = config;
+        self.generation = self.generation.saturating_add(1);
+        self.ensure_started().await;
     }
 
     fn token(&self) -> SessionToken {
@@ -247,34 +265,22 @@ async fn handle_request_inner(
             Ok(Response::Projects { projects })
         }
         Request::EnsureProject { config } => {
-            let existing = state.projects.lock().await.get(&config.project_id).cloned();
-            let session = if let Some(existing) = existing {
-                let changed = existing.lock().await.config != config;
-                if changed {
-                    let generation = existing.lock().await.generation.saturating_add(1);
-                    let replacement = Arc::new(Mutex::new(
-                        ProjectSession::start(config.clone(), generation).await,
-                    ));
-                    state
-                        .projects
-                        .lock()
-                        .await
-                        .insert(config.project_id.clone(), replacement.clone());
-                    replacement
-                } else {
-                    existing
-                }
-            } else {
-                let session = Arc::new(Mutex::new(ProjectSession::start(config.clone(), 1).await));
-                state
-                    .projects
-                    .lock()
-                    .await
-                    .insert(config.project_id.clone(), session.clone());
-                session
+            // Publish the per-project lock before starting Lean. Competing first-time
+            // ensures therefore converge on this one session instead of spawning two
+            // children and racing to replace the map entry.
+            let session = {
+                let mut projects = state.projects.lock().await;
+                projects
+                    .entry(config.project_id.clone())
+                    .or_insert_with(|| {
+                        Arc::new(Mutex::new(ProjectSession::new(config.clone(), 1)))
+                    })
+                    .clone()
             };
+            let mut session = session.lock().await;
+            session.reconfigure(config).await;
             Ok(Response::Project {
-                status: session.lock().await.status(),
+                status: session.status(),
             })
         }
         Request::CloseProject { project_id } => {
