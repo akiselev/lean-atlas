@@ -108,7 +108,10 @@ impl LeanClient {
     pub async fn close_document(&mut self, uri: impl Into<String>) -> Result<(), ClientError> {
         let uri = uri.into();
         self.transport
-            .notify("textDocument/didClose", json!({"textDocument": {"uri": uri}}))
+            .notify(
+                "textDocument/didClose",
+                json!({"textDocument": {"uri": uri}}),
+            )
             .await?;
         if self.uri == uri {
             self.uri.clear();
