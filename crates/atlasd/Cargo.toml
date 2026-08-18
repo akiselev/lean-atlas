@@ -5,12 +5,12 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-atlas-client.workspace = true
 atlas-daemon-protocol.workspace = true
 atlas-lean-client.workspace = true
 atlas-store.workspace = true
 daemonkit.workspace = true
 futures-util = "0.3"
+serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"
 thiserror.workspace = true
