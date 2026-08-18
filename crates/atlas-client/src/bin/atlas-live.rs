@@ -146,7 +146,10 @@ async fn run() -> Result<(), String> {
 }
 
 async fn send(client: &Client, request: Request) -> Result<(), String> {
-    let response = client.call(request).await.map_err(|error| error.to_string())?;
+    let response = client
+        .call(request)
+        .await
+        .map_err(|error| error.to_string())?;
     print_response(response)
 }
 
