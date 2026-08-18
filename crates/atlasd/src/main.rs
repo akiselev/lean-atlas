@@ -1,8 +1,8 @@
 use atlas_daemon_protocol::{
     CloseDocumentRequest, Command, DaemonSnapshot, DocumentRequest, ErrorCode, LeanLaunch,
-    LeanSnapshot, LeanState, MAX_FRAME_BYTES, OpenProjectRequest, Outcome, OverlaySnapshot,
-    PROTOCOL_VERSION, ProjectMutationRequest, ProjectRequest, ProjectSnapshot, Request, Response,
-    ResponsePayload, ServiceError,
+    LeanSnapshot, LeanState, MAX_FRAME_BYTES, OpenProjectRequest, OverlaySnapshot, PROTOCOL_VERSION,
+    ProjectMutationRequest, ProjectRequest, ProjectSnapshot, Request, Response, ResponsePayload,
+    ServiceError,
 };
 use atlas_lean_client::{ClientError as LeanError, LeanClient, LeanCommand};
 use atlas_store::Store;
@@ -71,10 +71,6 @@ impl Project {
             project_id: self.id.clone(),
             root: self.root.to_string_lossy().into_owned(),
             store_path: self.store_path.to_string_lossy().into_owned(),
-            // M5 establishes ownership and durability. Fact ingestion remains
-            // the semantic engine's concern; no daemon request in this milestone
-            // mutates facts, so newly-created stores begin at zero.
-            persisted_facts: 0,
             overlay_documents: self
                 .overlays
                 .iter()
@@ -152,6 +148,7 @@ impl Project {
 
 struct ServiceState {
     daemon_generation: String,
+    process_id: u32,
     projects: BTreeMap<String, Project>,
 }
 
@@ -159,6 +156,7 @@ impl ServiceState {
     fn new(context: &ServiceContext) -> Self {
         Self {
             daemon_generation: format!("{:?}", context.generation()),
+            process_id: std::process::id(),
             projects: BTreeMap::new(),
         }
     }
@@ -166,6 +164,7 @@ impl ServiceState {
     fn daemon_snapshot(&self) -> DaemonSnapshot {
         DaemonSnapshot {
             daemon_generation: self.daemon_generation.clone(),
+            process_id: self.process_id,
             projects: self.projects.len(),
         }
     }
@@ -222,7 +221,10 @@ impl ServiceState {
         let store = Store::open(&store_path).map_err(|error| {
             ServiceError::new(
                 ErrorCode::StoreUnavailable,
-                format!("cannot open semantic store {}: {error}", store_path.display()),
+                format!(
+                    "cannot open semantic store {}: {error}",
+                    store_path.display()
+                ),
             )
         })?;
         let mut project = Project {
@@ -262,15 +264,15 @@ impl ServiceState {
         if !project.overlays.is_empty() {
             if let Some(lean) = project.lean.as_mut() {
                 if let Err(error) = lean.keep_alive().await {
-                    return Err(
-                        project
-                            .recover_from_lean_failure(error, &daemon_generation)
-                            .await,
-                    );
+                    return Err(project
+                        .recover_from_lean_failure(error, &daemon_generation)
+                        .await);
                 }
             }
         }
-        Ok(ResponsePayload::Project(project.snapshot(&daemon_generation)))
+        Ok(ResponsePayload::Project(
+            project.snapshot(&daemon_generation),
+        ))
     }
 
     async fn open_document(
@@ -310,7 +312,9 @@ impl ServiceState {
                 .with_project(project.snapshot(&daemon_generation)));
             }
             // restart replayed the newly-recorded overlay.
-            return Ok(ResponsePayload::Project(project.snapshot(&daemon_generation)));
+            return Ok(ResponsePayload::Project(
+                project.snapshot(&daemon_generation),
+            ));
         }
         let result = if is_open {
             project
@@ -328,15 +332,15 @@ impl ServiceState {
                 .await
         };
         if let Err(error) = result {
-            return Err(
-                project
-                    .recover_from_lean_failure(error, &daemon_generation)
-                    .await,
-            );
+            return Err(project
+                .recover_from_lean_failure(error, &daemon_generation)
+                .await);
         }
         project.lean_state = LeanState::Ready;
         project.last_error = None;
-        Ok(ResponsePayload::Project(project.snapshot(&daemon_generation)))
+        Ok(ResponsePayload::Project(
+            project.snapshot(&daemon_generation),
+        ))
     }
 
     async fn close_document(
@@ -359,14 +363,14 @@ impl ServiceState {
         }
         if let Some(lean) = project.lean.as_mut() {
             if let Err(error) = lean.close_document(request.uri).await {
-                return Err(
-                    project
-                        .recover_from_lean_failure(error, &daemon_generation)
-                        .await,
-                );
+                return Err(project
+                    .recover_from_lean_failure(error, &daemon_generation)
+                    .await);
             }
         }
-        Ok(ResponsePayload::Project(project.snapshot(&daemon_generation)))
+        Ok(ResponsePayload::Project(
+            project.snapshot(&daemon_generation),
+        ))
     }
 
     async fn restart_lean(
@@ -391,7 +395,9 @@ impl ServiceState {
             .with_project(project.snapshot(&daemon_generation)));
         }
         project.last_error = None;
-        Ok(ResponsePayload::Project(project.snapshot(&daemon_generation)))
+        Ok(ResponsePayload::Project(
+            project.snapshot(&daemon_generation),
+        ))
     }
 
     async fn close_project(
@@ -417,7 +423,10 @@ fn project_id(root: &Path) -> String {
     hash.update(b"lean-atlas:project:v1\0");
     hash.update(root.as_os_str().to_string_lossy().as_bytes());
     let digest = hash.finalize();
-    digest[..16].iter().map(|byte| format!("{byte:02x}")).collect()
+    digest[..16]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 async fn handle_connection(
