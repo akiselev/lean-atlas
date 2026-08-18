@@ -2,7 +2,9 @@ use atlas_daemon_protocol::{
     DocumentOverlay, Envelope, PROTOCOL_VERSION, ProjectConfig, ProjectHealth, ProjectStatus,
     Request, Response, ServiceError, SessionToken,
 };
-use atlas_lean_client::{ClientError as LeanError, LeanClient, LeanCommand};
+use atlas_lean_client::{
+    ClientError as LeanError, LeanClient, LeanCommand, TransportError as LeanTransportError,
+};
 use atlas_lean_protocol::Position;
 use atlas_store::Store;
 use daemonkit::{Bootstrap, Daemon, DaemonSpec, Spawn};
@@ -13,10 +15,12 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::Mutex,
+    task::JoinSet,
 };
 
 const MAX_FRAME: usize = 64 * 1024 * 1024;
 const APP_ID: &str = "org.leanatlas.atlasd";
+const SESSION_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 
 type SharedSession = Arc<Mutex<ProjectSession>>;
 
@@ -25,6 +29,23 @@ struct ServiceState {
     // M5 establishes the durable semantic-store owner. Query/import operations are
     // intentionally added at the semantic-query layer rather than inventing a second DB.
     _store: Mutex<Store>,
+}
+
+impl ServiceState {
+    async fn shutdown_all(&self) {
+        // Drain first so no new request can rediscover a session that is being torn down.
+        // Connection tasks are aborted before this is called during daemon shutdown.
+        let sessions: Vec<SharedSession> = self
+            .projects
+            .lock()
+            .await
+            .drain()
+            .map(|(_, session)| session)
+            .collect();
+        for session in sessions {
+            session.lock().await.shutdown_client().await;
+        }
+    }
 }
 
 struct ProjectSession {
@@ -55,14 +76,21 @@ impl ProjectSession {
         }
     }
 
+    async fn shutdown_client(&mut self) {
+        if let Some(client) = self.client.take() {
+            // LeanClient/Transport also bounds the graceful LSP shutdown and force-kills
+            // a child that does not exit. The outer timeout protects atlasd itself; the
+            // transport's kill-on-drop guard makes cancellation here process-safe.
+            let _ = tokio::time::timeout(SESSION_SHUTDOWN_TIMEOUT, client.shutdown()).await;
+        }
+    }
+
     async fn reconfigure(&mut self, config: ProjectConfig) {
         if self.config == config {
             self.ensure_started().await;
             return;
         }
-        if let Some(client) = self.client.take() {
-            let _ = tokio::time::timeout(Duration::from_secs(2), client.shutdown()).await;
-        }
+        self.shutdown_client().await;
         self.config = config;
         self.generation = self.generation.saturating_add(1);
         self.ensure_started().await;
@@ -126,9 +154,7 @@ impl ProjectSession {
 
     async fn restart(&mut self, cause: impl Into<String>) -> String {
         let cause = cause.into();
-        if let Some(client) = self.client.take() {
-            let _ = tokio::time::timeout(Duration::from_secs(2), client.shutdown()).await;
-        }
+        self.shutdown_client().await;
         self.generation = self.generation.saturating_add(1);
         match self.spawn_lean().await {
             Ok(()) => cause,
@@ -150,6 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     projects: Mutex::new(HashMap::new()),
                     _store: Mutex::new(open_store()?),
                 });
+                let mut connections = JoinSet::new();
                 tokio::pin!(incoming);
                 loop {
                     tokio::select! {
@@ -158,13 +185,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             let Some(next) = next else { break };
                             if let Ok(stream) = next {
                                 let state = state.clone();
-                                tokio::spawn(async move {
+                                connections.spawn(async move {
                                     let _ = serve_connection(stream, state).await;
                                 });
                             }
                         }
                     }
                 }
+
+                // No request may race session teardown. Cancel active application streams,
+                // wait for their state clones to drop, then explicitly shut down every Lean
+                // child before allowing daemonkit to report the service stopped.
+                connections.abort_all();
+                while connections.join_next().await.is_some() {}
+                state.shutdown_all().await;
+
                 Ok::<_, std::io::Error>(())
             })
             .await?;
@@ -284,9 +319,7 @@ async fn handle_request_inner(
         Request::CloseProject { project_id } => {
             let session = state.projects.lock().await.remove(&project_id);
             if let Some(session) = session {
-                if let Some(client) = session.lock().await.client.take() {
-                    let _ = tokio::time::timeout(Duration::from_secs(2), client.shutdown()).await;
-                }
+                session.lock().await.shutdown_client().await;
             }
             Ok(Response::Ok { value: Value::Null })
         }
@@ -310,7 +343,7 @@ async fn handle_request_inner(
                 .open_document(document.uri, document.text, document.version)
                 .await
             {
-                return Err(restart_error(&mut session, error).await);
+                return Err(service_error_from_lean(&mut session, error).await);
             }
             Ok(Response::Project {
                 status: session.status(),
@@ -335,7 +368,7 @@ async fn handle_request_inner(
                 return Err(degraded(&session));
             };
             if let Err(error) = client.change_document(text, version).await {
-                return Err(restart_error(&mut session, error).await);
+                return Err(service_error_from_lean(&mut session, error).await);
             }
             Ok(Response::Project {
                 status: session.status(),
@@ -360,16 +393,7 @@ async fn handle_request_inner(
             let result: Result<Value, LeanError> = client.call(&method, &params).await;
             match result {
                 Ok(value) => Ok(Response::Ok { value }),
-                Err(LeanError::Transport(error)) => {
-                    Err(restart_error(&mut session, LeanError::Transport(error)).await)
-                }
-                Err(LeanError::StaleEnvironment) => {
-                    Err(restart_error(&mut session, LeanError::StaleEnvironment).await)
-                }
-                Err(error @ LeanError::StaleHandle) => Err(ServiceError::OracleFailure {
-                    project_id: session.config.project_id.clone(),
-                    message: error.to_string(),
-                }),
+                Err(error) => Err(service_error_from_lean(&mut session, error).await),
             }
         }
     }
@@ -397,6 +421,43 @@ fn degraded(session: &ProjectSession) -> ServiceError {
             .last_error
             .clone()
             .unwrap_or_else(|| "Lean session is unavailable".into()),
+    }
+}
+
+fn lean_error_requires_restart(error: &LeanError) -> bool {
+    match error {
+        // The Lean RPC session itself is no longer usable; reconnecting implies all
+        // RpcRefs/handles must be discarded, so Atlas changes the project generation.
+        LeanError::StaleEnvironment => true,
+
+        // These failures mean the request/response stream is dead or cannot be trusted
+        // to remain synchronized. Restart the owned Lean process and replay the overlay.
+        LeanError::Transport(LeanTransportError::Closed)
+        | LeanError::Transport(LeanTransportError::Io(_))
+        | LeanError::Transport(LeanTransportError::Json(_))
+        | LeanError::Transport(LeanTransportError::Frame(_)) => true,
+
+        // A JSON-RPC error is an application-level response from a live Lean server:
+        // bad params, unknown method, elaboration failure, etc. It must not destroy the
+        // session or invalidate unrelated handles. Spawn errors cannot occur on an
+        // established OracleCall and are likewise not evidence that this live child died.
+        LeanError::Transport(LeanTransportError::Rpc { .. })
+        | LeanError::Transport(LeanTransportError::Spawn(_))
+        | LeanError::StaleHandle => false,
+    }
+}
+
+async fn service_error_from_lean(
+    session: &mut ProjectSession,
+    error: LeanError,
+) -> ServiceError {
+    if lean_error_requires_restart(&error) {
+        restart_error(session, error).await
+    } else {
+        ServiceError::OracleFailure {
+            project_id: session.config.project_id.clone(),
+            message: error.to_string(),
+        }
     }
 }
 
@@ -449,4 +510,27 @@ where
     writer.write_all(&body).await?;
     writer.flush().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ordinary_rpc_errors_do_not_restart_the_lean_session() {
+        let rpc = LeanError::Transport(LeanTransportError::Rpc {
+            code: -32602,
+            message: "Cannot decode params in RPC call 'Atlas.Server.hello'".into(),
+        });
+        assert!(!lean_error_requires_restart(&rpc));
+        assert!(!lean_error_requires_restart(&LeanError::StaleHandle));
+    }
+
+    #[test]
+    fn dead_or_outdated_sessions_do_restart_the_lean_session() {
+        assert!(lean_error_requires_restart(&LeanError::Transport(
+            LeanTransportError::Closed
+        )));
+        assert!(lean_error_requires_restart(&LeanError::StaleEnvironment));
+    }
 }
