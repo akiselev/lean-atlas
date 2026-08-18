@@ -1,7 +1,6 @@
 use crate::{EvalOptions, FactSource, Literal, LogicError, Program, Query, QueryRow, eval};
 use atlas_schema::{
     Bindings, Derivation, DerivationId, FactId, FactRow, FactWarrant, Provenance, RelationTypeId,
-    Value,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
