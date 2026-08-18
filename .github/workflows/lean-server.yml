@@ -8,11 +8,21 @@ on:
 jobs:
   plugin:
     runs-on: ubuntu-latest
+    env:
+      # Keep every invocation (lake, the Python smoke, and the Rust-spawned server)
+      # on the exact toolchain declared by lean-server/lean-toolchain. An unpinned
+      # elan default can otherwise make the plugin and the process under test disagree.
+      ELAN_TOOLCHAIN: leanprover/lean4:v4.30.0
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install elan
-        run: curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y
+      - name: Install elan and pinned Lean
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y
+          export PATH="$HOME/.elan/bin:$PATH"
+          elan toolchain install "$ELAN_TOOLCHAIN"
+          test "$(cat lean-server/lean-toolchain)" = "$ELAN_TOOLCHAIN"
+          lean --version | grep -F 'version 4.30.0'
       - name: Build Atlas server plugin
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
