@@ -1,5 +1,7 @@
 use crate::{EvalOptions, FactSource, Literal, LogicError, Program, Query, QueryRow, Term, eval};
-use atlas_schema::{Bindings, FactId, FactRow, Provenance, RelationTypeId, Value};
+use atlas_schema::{
+    Bindings, Derivation, FactId, FactRow, FactWarrant, Provenance, RelationTypeId,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{
     Arc,
@@ -18,7 +20,7 @@ impl CancellationToken {
 }
 
 /// Semi-naive fixed point. After the seed round each recursive evaluation consumes at least
-/// one fact from the previous delta; results are deterministic and bounded.
+/// one fact from the previous delta; results and retained derivation alternatives are deterministic.
 pub fn evaluate_optimized<S: FactSource>(
     source: &S,
     p: &Program,
@@ -46,10 +48,13 @@ pub fn evaluate_optimized<S: FactSource>(
     for r in rels {
         db.entry(r).or_default().extend(source.scan(r, &empty)?)
     }
-    let mut seen: BTreeSet<(RelationTypeId, Vec<Value>)> = db
+    eval::sort_db(&mut db);
+
+    let mut seen: BTreeSet<eval::FactKey> = db
         .iter()
         .flat_map(|(r, fs)| fs.iter().map(move |f| (*r, f.args.clone())))
         .collect();
+    let mut derived = eval::derived_index(&db);
     let mut next = db.values().flatten().map(|f| f.id.0).max().unwrap_or(0) + 1;
 
     for s in 0..=strata.values().copied().max().unwrap_or(0) {
@@ -89,19 +94,30 @@ pub fn evaluate_optimized<S: FactSource>(
                     else {
                         continue;
                     };
-                    if seen.insert((rule.head.relation, args.clone())) {
-                        let warrant = eval::derived_warrant(&db, &support);
+                    let key = (rule.head.relation, args.clone());
+                    let derivation = Derivation::new(rule.id.clone(), support);
+                    if let Some(id) = derived.get(&key).copied() {
+                        // The fact may have been produced earlier in this same round or may
+                        // already live in the accumulated database. Preserve the alternative
+                        // in whichever collection owns it.
+                        if !eval::attach_derivation(&mut produced, id, derivation.clone()) {
+                            eval::attach_derivation(&mut db, id, derivation);
+                        }
+                        continue;
+                    }
+                    if seen.insert(key.clone()) {
                         let f = FactRow {
                             id: FactId(next),
                             relation: rule.head.relation,
                             args,
-                            warrant,
-                            provenance: Provenance::Derived {
-                                rule: rule.id.clone(),
-                                inputs: support,
-                            },
+                            warrant: FactWarrant::Heuristic,
+                            provenance: Provenance::derived(
+                                derivation.rule.clone(),
+                                derivation.inputs.clone(),
+                            ),
                         };
                         next += 1;
+                        derived.insert(key, f.id);
                         produced.entry(f.relation).or_default().push(f);
                     }
                 }
@@ -119,6 +135,7 @@ pub fn evaluate_optimized<S: FactSource>(
         }
     }
 
+    eval::recompute_derived_warrants(&mut db);
     let mut rows = eval::body(&db, &q.body)?
         .into_iter()
         .map(|(b, s)| QueryRow {
