@@ -1,6 +1,6 @@
 use atlas_daemon_protocol::{
-    DocumentOverlay, Envelope, ProjectConfig, ProjectHealth, ProjectStatus, Request, Response,
-    ServiceError, SessionToken, PROTOCOL_VERSION,
+    DocumentOverlay, Envelope, PROTOCOL_VERSION, ProjectConfig, ProjectHealth, ProjectStatus,
+    Request, Response, ServiceError, SessionToken,
 };
 use atlas_lean_client::{ClientError as LeanError, LeanClient, LeanCommand};
 use atlas_lean_protocol::Position;
@@ -193,7 +193,7 @@ where
         let envelope: Envelope<Request> = match read_frame(&mut stream).await {
             Ok(value) => value,
             Err(FrameError::Io(error)) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
-                return Ok(())
+                return Ok(());
             }
             Err(error) => {
                 let response = Response::Error {
@@ -237,7 +237,8 @@ async fn handle_request_inner(
             value: json!({"protocol": PROTOCOL_VERSION}),
         }),
         Request::Status => {
-            let sessions: Vec<SharedSession> = state.projects.lock().await.values().cloned().collect();
+            let sessions: Vec<SharedSession> =
+                state.projects.lock().await.values().cloned().collect();
             let mut projects = Vec::with_capacity(sessions.len());
             for session in sessions {
                 projects.push(session.lock().await.status());
@@ -251,15 +252,25 @@ async fn handle_request_inner(
                 let changed = existing.lock().await.config != config;
                 if changed {
                     let generation = existing.lock().await.generation.saturating_add(1);
-                    let replacement = Arc::new(Mutex::new(ProjectSession::start(config.clone(), generation).await));
-                    state.projects.lock().await.insert(config.project_id.clone(), replacement.clone());
+                    let replacement = Arc::new(Mutex::new(
+                        ProjectSession::start(config.clone(), generation).await,
+                    ));
+                    state
+                        .projects
+                        .lock()
+                        .await
+                        .insert(config.project_id.clone(), replacement.clone());
                     replacement
                 } else {
                     existing
                 }
             } else {
                 let session = Arc::new(Mutex::new(ProjectSession::start(config.clone(), 1).await));
-                state.projects.lock().await.insert(config.project_id.clone(), session.clone());
+                state
+                    .projects
+                    .lock()
+                    .await
+                    .insert(config.project_id.clone(), session.clone());
                 session
             };
             Ok(Response::Project {
@@ -297,9 +308,15 @@ async fn handle_request_inner(
             {
                 return Err(restart_error(&mut session, error).await);
             }
-            Ok(Response::Project { status: session.status() })
+            Ok(Response::Project {
+                status: session.status(),
+            })
         }
-        Request::ChangeDocument { token, text, version } => {
+        Request::ChangeDocument {
+            token,
+            text,
+            version,
+        } => {
             let session = get_session(&state, &token.project_id).await?;
             let mut session = session.lock().await;
             session.validate_token(&token)?;
@@ -316,7 +333,9 @@ async fn handle_request_inner(
             if let Err(error) = client.change_document(text, version).await {
                 return Err(restart_error(&mut session, error).await);
             }
-            Ok(Response::Project { status: session.status() })
+            Ok(Response::Project {
+                status: session.status(),
+            })
         }
         Request::OracleCall {
             token,
@@ -352,7 +371,10 @@ async fn handle_request_inner(
     }
 }
 
-async fn get_session(state: &ServiceState, project_id: &str) -> Result<SharedSession, ServiceError> {
+async fn get_session(
+    state: &ServiceState,
+    project_id: &str,
+) -> Result<SharedSession, ServiceError> {
     state
         .projects
         .lock()
