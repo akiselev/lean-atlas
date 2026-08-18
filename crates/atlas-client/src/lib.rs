@@ -108,7 +108,9 @@ mod tests {
     async fn frame_roundtrip() {
         let (mut a, mut b) = tokio::io::duplex(1024);
         let writer = tokio::spawn(async move {
-            write_frame(&mut a, &Envelope::new(Request::Ping)).await.unwrap();
+            write_frame(&mut a, &Envelope::new(Request::Ping))
+                .await
+                .unwrap();
         });
         let envelope: Envelope<Request> = read_frame(&mut b).await.unwrap();
         writer.await.unwrap();
