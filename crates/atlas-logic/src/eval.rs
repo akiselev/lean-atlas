@@ -54,14 +54,14 @@ pub(crate) fn sort_db(db: &mut BTreeMap<RelationTypeId, Vec<FactRow>>) {
     }
 }
 
-pub(crate) fn derived_index(db: &BTreeMap<RelationTypeId, Vec<FactRow>>) -> BTreeMap<FactKey, FactId> {
+pub(crate) fn derived_index(
+    db: &BTreeMap<RelationTypeId, Vec<FactRow>>,
+) -> BTreeMap<FactKey, FactId> {
     db.iter()
         .flat_map(|(relation, facts)| {
             facts.iter().filter_map(move |fact| {
-                matches!(fact.provenance, Provenance::Derived { .. }).then_some((
-                    (*relation, fact.args.clone()),
-                    fact.id,
-                ))
+                matches!(fact.provenance, Provenance::Derived { .. })
+                    .then_some(((*relation, fact.args.clone()), fact.id))
             })
         })
         .collect()
@@ -86,14 +86,12 @@ pub(crate) fn derivation_warrant(
     warrants: &BTreeMap<FactId, FactWarrant>,
     derivation: &Derivation,
 ) -> FactWarrant {
-    derivation.inputs.iter().fold(FactWarrant::Structural, |warrant, id| {
-        warrant.weaker(
-            warrants
-                .get(id)
-                .copied()
-                .unwrap_or(FactWarrant::Heuristic),
-        )
-    })
+    derivation
+        .inputs
+        .iter()
+        .fold(FactWarrant::Structural, |warrant, id| {
+            warrant.weaker(warrants.get(id).copied().unwrap_or(FactWarrant::Heuristic))
+        })
 }
 
 /// Recompute trust after the semantic fixed point. Alternative derivations are an OR, so a fact
