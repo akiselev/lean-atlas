@@ -40,14 +40,15 @@ pub struct Transport {
 
 impl Transport {
     pub async fn spawn(spec: &LeanCommand) -> Result<Self, TransportError> {
-        let mut child = Command::new(&spec.program)
+        let mut command = Command::new(&spec.program);
+        command
             .args(&spec.args)
             .current_dir(&spec.working_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
-            .spawn()
-            .map_err(TransportError::Spawn)?;
+            .kill_on_drop(true);
+        let mut child = command.spawn().map_err(TransportError::Spawn)?;
         let stdin = child.stdin.take().ok_or(TransportError::Closed)?;
         let stdout = BufReader::new(child.stdout.take().ok_or(TransportError::Closed)?);
         let mut transport = Self {
@@ -73,6 +74,10 @@ impl Transport {
         Ok(transport)
     }
 
+    pub fn process_id(&self) -> Option<u32> {
+        self.child.id()
+    }
+
     pub async fn request<T: DeserializeOwned>(
         &mut self,
         method: &str,
@@ -84,6 +89,18 @@ impl Transport {
             .await?;
         loop {
             let msg = self.read().await?;
+            // Lean 4.30 may interleave server requests (notably
+            // workspace/inlayHint/refresh) with a client response. A server
+            // request has a method even when its id happens to equal ours; it
+            // must be acknowledged rather than deserialized as our result.
+            if let Some(method) = msg.get("method").and_then(Value::as_str) {
+                if let Some(server_id) = msg.get("id").cloned() {
+                    self.write(&json!({"jsonrpc":"2.0","id":server_id,"result":null}))
+                        .await?;
+                }
+                let _ = method;
+                continue;
+            }
             if msg.get("id").and_then(Value::as_u64) != Some(id) {
                 continue;
             }
