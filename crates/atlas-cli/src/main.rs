@@ -78,8 +78,9 @@ fn print_payload(payload: ResponsePayload) -> Result<(), String> {
 
 fn remote_error(error: ClientError) -> String {
     match error {
-        ClientError::Remote(remote) => serde_json::to_string_pretty(&remote)
-            .unwrap_or_else(|_| format!("{remote:?}")),
+        ClientError::Remote(remote) => {
+            serde_json::to_string_pretty(&remote).unwrap_or_else(|_| format!("{remote:?}"))
+        }
         other => other.to_string(),
     }
 }
@@ -96,7 +97,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run(args: &[String]) -> Result<(), String> {
-    let command = args.first().map(String::as_str).ok_or_else(|| USAGE.to_string())?;
+    let command = args
+        .first()
+        .map(String::as_str)
+        .ok_or_else(|| USAGE.to_string())?;
     let client = AtlasClient::discover().map_err(remote_error)?;
     match command {
         "ping" => print_payload(
