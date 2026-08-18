@@ -122,6 +122,7 @@ pub enum ResponsePayload {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DaemonSnapshot {
     pub daemon_generation: String,
+    pub process_id: u32,
     pub projects: usize,
 }
 
@@ -130,7 +131,6 @@ pub struct ProjectSnapshot {
     pub project_id: String,
     pub root: String,
     pub store_path: String,
-    pub persisted_facts: u64,
     pub overlay_documents: Vec<OverlaySnapshot>,
     pub lean: LeanSnapshot,
     pub daemon_generation: String,
@@ -217,7 +217,10 @@ mod tests {
             }),
         );
         let encoded = serde_json::to_vec(&request).unwrap();
-        assert_eq!(serde_json::from_slice::<Request>(&encoded).unwrap(), request);
+        assert_eq!(
+            serde_json::from_slice::<Request>(&encoded).unwrap(),
+            request
+        );
     }
 
     #[test]
