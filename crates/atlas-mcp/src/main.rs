@@ -1,11 +1,11 @@
 use atlas_client::{
+    AtlasClient, ClientError,
     protocol::{
         CloseDocumentRequest, Command, DocumentRequest, LeanLaunch, OpenProjectRequest,
         ProjectMutationRequest, ProjectRequest,
     },
-    AtlasClient, ClientError,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::env;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 

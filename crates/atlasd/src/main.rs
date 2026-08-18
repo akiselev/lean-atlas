@@ -1,8 +1,8 @@
 use atlas_daemon_protocol::{
     CloseDocumentRequest, Command, DaemonSnapshot, DocumentRequest, ErrorCode, LeanLaunch,
-    LeanSnapshot, LeanState, MAX_FRAME_BYTES, OpenProjectRequest, OverlaySnapshot, PROTOCOL_VERSION,
-    ProjectMutationRequest, ProjectRequest, ProjectSnapshot, Request, Response, ResponsePayload,
-    ServiceError,
+    LeanSnapshot, LeanState, MAX_FRAME_BYTES, OpenProjectRequest, OverlaySnapshot,
+    PROTOCOL_VERSION, ProjectMutationRequest, ProjectRequest, ProjectSnapshot, Request, Response,
+    ResponsePayload, ServiceError,
 };
 use atlas_engine::runtime::{LeanClient, LeanCommand, LeanError, Store};
 use daemonkit::{AuthenticatedStream, Bootstrap, Incoming, ServiceContext, Shutdown};
