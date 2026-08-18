@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 atlas-daemon-protocol.workspace = true
 daemonkit.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { version = "1", features = ["io-util", "process", "rt", "macros", "sync", "time"] }
