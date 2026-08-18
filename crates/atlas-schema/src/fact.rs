@@ -343,10 +343,7 @@ mod tests {
     fn alternative_derivations_have_stable_ids_and_canonical_order() {
         let a = Derivation::new("reach.base", vec![FactId(20)]);
         let b = Derivation::new("reach.base", vec![FactId(10)]);
-        assert_eq!(
-            a.id,
-            Derivation::new("reach.base", vec![FactId(20)]).id
-        );
+        assert_eq!(a.id, Derivation::new("reach.base", vec![FactId(20)]).id);
         assert_ne!(a.id, b.id);
 
         let mut left = Provenance::derived(a.rule.clone(), a.inputs.clone());
