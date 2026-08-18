@@ -68,3 +68,22 @@ jobs:
           ATLAS_LEAN_ROOT_URI="$root_uri" \
           ATLAS_LEAN_FIXTURE_URI="$fixture_uri" \
             cargo test -p atlas-lean-client --test live_rpc -- --nocapture
+      - name: Live atlasd lifecycle and RPC-error smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.elan/bin:$PATH"
+          cargo build -p atlasd -p atlas-client --bins
+          workdir="$(realpath lean-server)"
+          fixture="$(realpath lean-server/Fixtures/RpcSmoke.lean)"
+          root_uri="$(python3 -c 'import pathlib; print(pathlib.Path("lean-server").resolve().as_uri())')"
+          fixture_uri="$(python3 -c 'import pathlib; print(pathlib.Path("lean-server/Fixtures/RpcSmoke.lean").resolve().as_uri())')"
+          python3 lean-server/tests/atlasd_smoke.py \
+            "$(realpath target/debug/atlas-live)" \
+            "$(realpath target/debug/atlasd)" \
+            "$(command -v lean)" \
+            "${{ steps.plugin.outputs.plugin }}" \
+            "$workdir" \
+            "$fixture" \
+            "$root_uri" \
+            "$fixture_uri"
