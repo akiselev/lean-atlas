@@ -1,6 +1,10 @@
 use crate::{Literal, LogicError, Program, Term, bind_atom, eval_term};
-use atlas_schema::{Bindings, FactId, FactRow, FactWarrant, RelationTypeId};
+use atlas_schema::{
+    Bindings, Derivation, FactId, FactRow, FactWarrant, Provenance, RelationTypeId, Value,
+};
 use std::collections::{BTreeMap, BTreeSet};
+
+pub(crate) type FactKey = (RelationTypeId, Vec<Value>);
 
 pub(crate) fn body(
     db: &BTreeMap<RelationTypeId, Vec<FactRow>>,
@@ -42,19 +46,104 @@ pub(crate) fn body(
     Ok(states)
 }
 
-/// Datalog inference is structural at best, and can never strengthen the weakest
-/// supporting fact. This makes heuristic/numerical inputs remain heuristic downstream.
-pub(crate) fn derived_warrant(
-    db: &BTreeMap<RelationTypeId, Vec<FactRow>>,
-    support: &[FactId],
-) -> FactWarrant {
-    let mut warrant = FactWarrant::Structural;
-    for id in support {
-        if let Some(fact) = db.values().flatten().find(|fact| fact.id == *id) {
-            warrant = warrant.weaker(fact.warrant);
+/// Normalize source ordering before evaluation. A `FactSource` is not required to return rows
+/// in a stable order, but rule discovery, generated fact IDs and explanations must be stable.
+pub(crate) fn sort_db(db: &mut BTreeMap<RelationTypeId, Vec<FactRow>>) {
+    for facts in db.values_mut() {
+        facts.sort_by_key(|fact| fact.id);
+    }
+}
+
+pub(crate) fn derived_index(db: &BTreeMap<RelationTypeId, Vec<FactRow>>) -> BTreeMap<FactKey, FactId> {
+    db.iter()
+        .flat_map(|(relation, facts)| {
+            facts.iter().filter_map(move |fact| {
+                matches!(fact.provenance, Provenance::Derived { .. }).then_some((
+                    (*relation, fact.args.clone()),
+                    fact.id,
+                ))
+            })
+        })
+        .collect()
+}
+
+pub(crate) fn attach_derivation(
+    db: &mut BTreeMap<RelationTypeId, Vec<FactRow>>,
+    id: FactId,
+    derivation: Derivation,
+) -> bool {
+    for fact in db.values_mut().flatten() {
+        if fact.id == id {
+            return fact.provenance.add_derivation(derivation);
         }
     }
-    warrant
+    false
+}
+
+/// One derivation is a conjunction, so it is bounded by its weakest input and by the
+/// structural ceiling of Datalog inference itself.
+pub(crate) fn derivation_warrant(
+    warrants: &BTreeMap<FactId, FactWarrant>,
+    derivation: &Derivation,
+) -> FactWarrant {
+    derivation.inputs.iter().fold(FactWarrant::Structural, |warrant, id| {
+        warrant.weaker(
+            warrants
+                .get(id)
+                .copied()
+                .unwrap_or(FactWarrant::Heuristic),
+        )
+    })
+}
+
+/// Recompute trust after the semantic fixed point. Alternative derivations are an OR, so a fact
+/// receives the strongest warrant justified by any retained derivation. Derived dependencies may
+/// themselves improve as stronger alternatives are discovered, hence the small monotone fixed point.
+pub(crate) fn recompute_derived_warrants(db: &mut BTreeMap<RelationTypeId, Vec<FactRow>>) {
+    for fact in db.values_mut().flatten() {
+        if matches!(fact.provenance, Provenance::Derived { .. }) {
+            fact.warrant = FactWarrant::Heuristic;
+        }
+    }
+
+    let fact_count = db.values().map(Vec::len).sum::<usize>();
+    let max_passes = fact_count.saturating_mul(4).saturating_add(1);
+    for _ in 0..max_passes {
+        let warrants = db
+            .values()
+            .flatten()
+            .map(|fact| (fact.id, fact.warrant))
+            .collect::<BTreeMap<_, _>>();
+        let mut updates = Vec::new();
+
+        for fact in db.values().flatten() {
+            if !matches!(fact.provenance, Provenance::Derived { .. }) {
+                continue;
+            }
+            let strongest = fact
+                .provenance
+                .derivations()
+                .iter()
+                .fold(FactWarrant::Heuristic, |best, derivation| {
+                    best.stronger(derivation_warrant(&warrants, derivation))
+                });
+            if strongest.is_stronger_than(fact.warrant) {
+                updates.push((fact.id, strongest));
+            }
+        }
+
+        if updates.is_empty() {
+            return;
+        }
+        for (id, warrant) in updates {
+            for fact in db.values_mut().flatten() {
+                if fact.id == id {
+                    fact.warrant = warrant;
+                    break;
+                }
+            }
+        }
+    }
 }
 
 fn eq(a: &Term, b: &Term, bs: &mut Bindings) -> bool {
