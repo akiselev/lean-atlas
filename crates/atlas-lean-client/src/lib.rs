@@ -121,6 +121,14 @@ impl LeanClient {
         Ok(())
     }
 
+    /// Select an already-open Lean document as the current RPC target without
+    /// sending another `didOpen`. This keeps multi-document overlays distinct
+    /// from the single document/session selected for typed RPC calls.
+    pub async fn select_document(&mut self, uri: impl Into<String>) -> Result<(), ClientError> {
+        self.uri = uri.into();
+        self.connect().await
+    }
+
     pub fn set_position(&mut self, position: Position) {
         self.position = position;
     }
