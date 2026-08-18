@@ -29,15 +29,14 @@ atlas-daemon-protocol
   │    ├─ atlas-cli
   │    └─ atlas-mcp
   └─ atlasd
-       ├─ atlas-store
-       ├─ atlas-lean-client
+       ├─ atlas-engine
        └─ daemonkit
 
 atlas (compatibility facade / static JSONL tools)
   └─ atlas-schema
 ```
 
-`scripts/check-deps.py` enforces the forbidden inward dependency edges in CI. `atlas-client` and `atlasd` share only the versioned daemon protocol and daemonkit lifecycle/transport primitives; `atlasd` never depends on the client frontend.
+`scripts/check-deps.py` enforces the forbidden inward dependency edges in CI, including exact workspace-edge allowlists for the M5 daemon crates. `atlasd` reaches storage and Lean only through `atlas-engine`; it never depends on the client frontend. `atlas-client` is the sole workspace dependency of the live CLI and MCP frontends and re-exports the versioned daemon protocol types they need.
 
 ## Semantic data
 
@@ -86,6 +85,6 @@ Unsaved document text is recorded in the daemon before it is sent to Lean. A Lea
 
 Unexpected Lean transport failure is surfaced as a structured `lean_restarted` event when replay succeeds, or `lean_unavailable` when recovery fails. An unexpected `atlasd` process loss is repaired through daemonkit; persistent SQLite state survives, while editor overlays are intentionally process-local and must be republished by the editor after daemon loss.
 
-`atlas-cli` is the live operator/agent frontend. `atlas-live-mcp` is the MCP frontend over the same client and daemon. The existing `atlas <query> <slice.jsonl>` commands remain unchanged as the explicit offline/export path and do not require `atlasd`.
+`atlas-cli` is the live operator/agent frontend. The canonical `atlas-mcp` binary is the MCP frontend over the same client and daemon. The pre-M5 slice-only MCP server remains available as `atlas-static-mcp`, while the existing `atlas <query> <slice.jsonl>` commands remain unchanged as the explicit offline/export path and do not require `atlasd`.
 
 The first five user-facing semantic queries (`goal-match`, `why-not`, `instance-path`, `minimal-context`, `compose`), Artifactum/Outboard integration, and scientific dataset/plugin layers begin after M5.
