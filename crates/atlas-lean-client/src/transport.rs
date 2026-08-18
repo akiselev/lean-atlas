@@ -1,11 +1,14 @@
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
-use std::{path::PathBuf, process::Stdio};
+use std::{path::PathBuf, process::Stdio, time::Duration};
 use thiserror::Error;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, ChildStdout, Command},
 };
+
+const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
+const EXIT_WAIT_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Debug)]
 pub struct LeanCommand {
@@ -40,14 +43,17 @@ pub struct Transport {
 
 impl Transport {
     pub async fn spawn(spec: &LeanCommand) -> Result<Self, TransportError> {
-        let mut child = Command::new(&spec.program)
+        let mut command = Command::new(&spec.program);
+        command
             .args(&spec.args)
             .current_dir(&spec.working_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
-            .spawn()
-            .map_err(TransportError::Spawn)?;
+            // `atlasd` is the owner of this process. If a bounded shutdown future is
+            // cancelled or the owning session is otherwise dropped, never detach Lean.
+            .kill_on_drop(true);
+        let mut child = command.spawn().map_err(TransportError::Spawn)?;
         let stdin = child.stdin.take().ok_or(TransportError::Closed)?;
         let stdout = BufReader::new(child.stdout.take().ok_or(TransportError::Closed)?);
         let mut transport = Self {
@@ -178,10 +184,32 @@ impl Transport {
     }
 
     pub async fn shutdown(mut self) -> Result<(), TransportError> {
-        let _: Value = self.request("shutdown", Value::Null).await?;
-        self.notify("exit", Value::Null).await?;
-        let _ = self.child.wait().await;
-        Ok(())
+        // Try the LSP shutdown/exit sequence, but never let a silent or wedged Lean
+        // process escape ownership. `kill_on_drop(true)` is the final cancellation guard;
+        // the explicit kill below handles a child that ignores `exit` while this future
+        // continues to run normally.
+        let graceful = tokio::time::timeout(GRACEFUL_SHUTDOWN_TIMEOUT, async {
+            let _: Value = self.request("shutdown", Value::Null).await?;
+            self.notify("exit", Value::Null).await?;
+            Ok::<(), TransportError>(())
+        })
+        .await;
+
+        let exited = matches!(
+            tokio::time::timeout(EXIT_WAIT_TIMEOUT, self.child.wait()).await,
+            Ok(Ok(_))
+        );
+        if !exited {
+            let _ = self.child.kill().await;
+            let _ = self.child.wait().await;
+        }
+
+        match graceful {
+            Ok(result) => result,
+            // A timeout is a cleanup condition, not a reason to leave a child alive.
+            // The child has already been force-reaped above.
+            Err(_) => Ok(()),
+        }
     }
 }
 
