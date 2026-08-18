@@ -1,6 +1,6 @@
 # Lean-Atlas v2 architecture
 
-Status: implemented through M4 (live Lean RPC), 2026-08-17.
+Status: implemented through M5 (`atlasd` daemonized live index), 2026-08-17.
 
 ## Ownership
 
@@ -24,11 +24,20 @@ atlas-engine
   ├─ atlas-logic
   └─ atlas-lean-client
 
-atlas (compatibility facade)
+atlas-daemon-protocol
+  ├─ atlas-client ── daemonkit
+  │    ├─ atlas-cli
+  │    └─ atlas-mcp
+  └─ atlasd
+       ├─ atlas-store
+       ├─ atlas-lean-client
+       └─ daemonkit
+
+atlas (compatibility facade / static JSONL tools)
   └─ atlas-schema
 ```
 
-`scripts/check-deps.py` enforces the forbidden inward dependency edges in CI.
+`scripts/check-deps.py` enforces the forbidden inward dependency edges in CI. `atlas-client` and `atlasd` share only the versioned daemon protocol and daemonkit lifecycle/transport primitives; `atlasd` never depends on the client frontend.
 
 ## Semantic data
 
@@ -46,7 +55,7 @@ The legacy relation enum/parser/registry has been replaced by one declarative re
 
 `lean-server/` is a separate Lean package pinned for CI compatibility testing. Its shared plugin registers Atlas methods into Lean's builtin RPC procedure table, so user research files do not need to import Atlas modules.
 
-`atlas-lean-client` owns the `lean --server` child/session and speaks Lean's LSP framing plus `$/lean/rpc/connect`, `call`, `keepAlive`, and `release`. Heavy Lean values cross requests only as native `WithRpcRef` handles. Session invalidation and invalid references become explicit stale-environment/stale-handle errors.
+`atlas-lean-client` owns a `lean --server` child/session and speaks Lean's LSP framing plus `$/lean/rpc/connect`, `call`, `keepAlive`, and `release`. Heavy Lean values cross requests only as native `WithRpcRef` handles. Session invalidation and invalid references become explicit stale-environment/stale-handle errors. Lean server requests interleaved with client responses are demultiplexed before response IDs are matched, including Lean 4.30's refresh requests.
 
 The M4 operation gate is:
 
@@ -62,4 +71,21 @@ The M4 operation gate is:
 - `checkProof`
 - batched `isDefEq`
 
-The daemon/session manager (`atlasd`), first five user-facing semantic queries, Artifactum/Outboard integration and scientific dataset/plugin layers begin after this milestone.
+## M5 daemon and live index boundary
+
+`daemonkit` owns the lifecycle of one authenticated, global `atlasd` instance. `atlasd` owns project sessions and their Lean stdio children; daemonkit does not manage Lean directly. CLI and MCP frontends both use `atlas-client`, so they converge on the same authenticated daemon generation and cannot accidentally create private semantic worlds.
+
+A project session is keyed by a stable digest of its canonical root. It owns:
+
+- the project-local persistent SQLite semantic store (default `.lean-atlas/atlas.sqlite`);
+- one Lean child and an explicit Lean-process generation;
+- a map of unsaved open-file overlays with editor versions;
+- structured `ready`, `degraded`, `restarting`, or `stopped` Lean state.
+
+Unsaved document text is recorded in the daemon before it is sent to Lean. A Lean-child restart increments the project Lean generation and deterministically replays every open overlay with `didOpen`, yielding fresh RPC sessions. Mutating requests may carry `expected_lean_generation`; stale generations are rejected rather than silently acting on a successor. Native Lean `RpcRef` values are deliberately absent from the daemon protocol, so process-local Lean handles cannot cross a restart or client boundary.
+
+Unexpected Lean transport failure is surfaced as a structured `lean_restarted` event when replay succeeds, or `lean_unavailable` when recovery fails. An unexpected `atlasd` process loss is repaired through daemonkit; persistent SQLite state survives, while editor overlays are intentionally process-local and must be republished by the editor after daemon loss.
+
+`atlas-cli` is the live operator/agent frontend. `atlas-live-mcp` is the MCP frontend over the same client and daemon. The existing `atlas <query> <slice.jsonl>` commands remain unchanged as the explicit offline/export path and do not require `atlasd`.
+
+The first five user-facing semantic queries (`goal-match`, `why-not`, `instance-path`, `minimal-context`, `compose`), Artifactum/Outboard integration, and scientific dataset/plugin layers begin after M5.
