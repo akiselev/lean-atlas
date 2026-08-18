@@ -58,3 +58,19 @@ jobs:
           ATLAS_LEAN_ROOT_URI="$root_uri" \
           ATLAS_LEAN_FIXTURE_URI="$fixture_uri" \
             cargo test -p atlas-lean-client --test live_rpc -- --nocapture
+      - name: Live atlasd M5 lifecycle smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.elan/bin:$PATH"
+          cargo build -p atlasd -p atlas-cli -p atlas-mcp
+          export ATLASD_BIN="$(realpath target/debug/atlasd)"
+          export ATLAS_LEAN_BIN="$(command -v lean)"
+          export ATLAS_LEAN_PLUGIN="${{ steps.plugin.outputs.plugin }}"
+          export ATLAS_LEAN_ROOT_URI="$(python3 -c 'import pathlib; print(pathlib.Path("lean-server").resolve().as_uri())')"
+          export ATLAS_M5_CLI="$(realpath target/debug/atlas-cli)"
+          export ATLAS_M5_MCP="$(realpath target/debug/atlas-live-mcp)"
+          export ATLAS_M5_ROOT="$(realpath lean-server)"
+          export ATLAS_M5_FIXTURE="$(realpath lean-server/Fixtures/RpcSmoke.lean)"
+          export ATLAS_M5_FIXTURE_URI="$(python3 -c 'import pathlib; print(pathlib.Path("lean-server/Fixtures/RpcSmoke.lean").resolve().as_uri())')"
+          python3 scripts/m5-atlasd-smoke.py
