@@ -36,7 +36,11 @@ async fn handle_line(client: &Client, line: &str) -> Option<String> {
     let request: Value = match serde_json::from_str(line) {
         Ok(value) => value,
         Err(error) => {
-            return Some(rpc_error(Value::Null, -32700, &format!("parse error: {error}")));
+            return Some(rpc_error(
+                Value::Null,
+                -32700,
+                &format!("parse error: {error}"),
+            ));
         }
     };
     let id = request.get("id").cloned()?;
@@ -87,7 +91,10 @@ async fn call_tool(client: &Client, params: &Value) -> Result<String, String> {
         .get("name")
         .and_then(Value::as_str)
         .ok_or_else(|| "tools/call requires a tool name".to_string())?;
-    let arguments = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+    let arguments = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     let request = match name {
         "atlasd_status" => Request::Status,
         "atlasd_request" => serde_json::from_value(
@@ -99,7 +106,10 @@ async fn call_tool(client: &Client, params: &Value) -> Result<String, String> {
         .map_err(|error| format!("invalid atlasd request: {error}"))?,
         other => return Err(format!("unknown tool `{other}`")),
     };
-    let response = client.call(request).await.map_err(|error| error.to_string())?;
+    let response = client
+        .call(request)
+        .await
+        .map_err(|error| error.to_string())?;
     serde_json::to_string_pretty(&response).map_err(|error| error.to_string())
 }
 
