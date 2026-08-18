@@ -4,8 +4,7 @@ use atlas_daemon_protocol::{
     ProjectMutationRequest, ProjectRequest, ProjectSnapshot, Request, Response, ResponsePayload,
     ServiceError,
 };
-use atlas_lean_client::{ClientError as LeanError, LeanClient, LeanCommand};
-use atlas_store::Store;
+use atlas_engine::runtime::{LeanClient, LeanCommand, LeanError, Store};
 use daemonkit::{AuthenticatedStream, Bootstrap, Incoming, ServiceContext, Shutdown};
 use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
