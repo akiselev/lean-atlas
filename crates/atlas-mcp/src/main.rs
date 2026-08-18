@@ -1,7 +1,9 @@
-use atlas_client::{AtlasClient, ClientError};
-use atlas_daemon_protocol::{
-    Command, DocumentRequest, LeanLaunch, OpenProjectRequest, ProjectMutationRequest,
-    ProjectRequest,
+use atlas_client::{
+    AtlasClient, ClientError,
+    protocol::{
+        Command, DocumentRequest, LeanLaunch, OpenProjectRequest, ProjectMutationRequest,
+        ProjectRequest,
+    },
 };
 use serde_json::{Value, json};
 use std::env;
