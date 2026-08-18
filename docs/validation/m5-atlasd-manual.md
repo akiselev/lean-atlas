@@ -95,6 +95,8 @@ First stop any prior test daemon:
 "$ATLAS_LIVE" --atlasd "$ATLASD" stop || true
 ```
 
+If that prior daemon owned a project, record its Lean child PID(s) before stopping it and verify every recorded PID is gone after `stop` returns. `Stopped { ... }` is not sufficient evidence if a `lean --server` process remains alive.
+
 Then launch 32 competing clients:
 
 ```bash
@@ -124,16 +126,16 @@ GEN=1 # replace with the observed value
 "$ATLAS_LIVE" --atlasd "$ATLASD" open rpc-smoke "$GEN" "$FIXTURE_URI" 1 "$FIXTURE"
 ```
 
-Call the hello oracle using a params file to avoid shell quoting ambiguity:
+Call the hello oracle using a params file to avoid shell quoting ambiguity. The protocol struct uses snake_case field names:
 
 ```bash
 cat > /tmp/atlas-hello.json <<'JSON'
-{"atlasProtocol":"1","requestedFeatures":[],"position":{"line":2,"character":0}}
+{"atlas_protocol":"2.0.0","requested_features":[],"position":{"line":2,"character":0}}
 JSON
-"$ATLAS_LIVE" --atlasd "$ATLASD" call rpc-smoke "$GEN" 2 0 Atlas.hello @/tmp/atlas-hello.json
+"$ATLAS_LIVE" --atlasd "$ATLASD" call rpc-smoke "$GEN" 2 0 Atlas.Server.hello @/tmp/atlas-hello.json
 ```
 
-Use the exact method constant emitted by `atlas-lean-protocol` if it differs from `Atlas.hello`; do not change production code merely to fit this example command.
+Use the exact method constant emitted by `atlas-lean-protocol` if it changes; do not change production code merely to fit this example command.
 
 Required observations:
 
@@ -141,6 +143,30 @@ Required observations:
 - only one Lean `--server` child belongs to this project;
 - the oracle response is non-null and typed JSON;
 - repeated calls keep the same project generation.
+
+### Application-level RPC rejection must not restart Lean
+
+Record the current Lean PID as `LEAN_PID` and current generation as `GEN`. Now deliberately send the previously reported camelCase/malformed hello request:
+
+```bash
+cat > /tmp/atlas-hello-bad.json <<'JSON'
+{"atlasProtocol":"2.0.0","requestedFeatures":[],"position":{"line":2,"character":0}}
+JSON
+"$ATLAS_LIVE" --atlasd "$ATLASD" call rpc-smoke "$GEN" 2 0 Atlas.Server.hello @/tmp/atlas-hello-bad.json
+"$ATLAS_LIVE" --atlasd "$ATLASD" status
+```
+
+Also call a deliberately unknown Atlas RPC method with otherwise valid JSON.
+
+Required observations for both failures:
+
+- the service response is `oracle_failure` (or a more specific non-restart request/oracle error), not `lean_restarted`;
+- the error preserves Lean's useful JSON-RPC diagnostic, such as `Cannot decode params` or unknown-method information;
+- project generation is still exactly `GEN`;
+- `LEAN_PID` is still alive and is still the project's Lean process;
+- a subsequent valid `Atlas.Server.hello` call succeeds with the same generation and PID.
+
+A JSON-RPC error response proves Lean is alive enough to reject the request. Do not classify it as transport death.
 
 ### Overlay change
 
@@ -235,6 +261,8 @@ Required observations:
 - no orphaned Atlas daemon survives;
 - project sessions are process-local and therefore must be re-ensured after an atlasd crash; semantic facts in the SQLite store persist.
 
+The abrupt-kill case relies on stdio/process ownership cleanup and is distinct from the graceful-stop acceptance test below.
+
 ## 10. Persistent semantic store survives daemon generations
 
 **MUTATES semantic test DB.** Insert a fixture fact through the existing `atlas-store` test/import path using `ATLAS_STORE_PATH`, stop/restart the daemon, and read the same fact back. Also inspect the SQLite file directly:
@@ -271,7 +299,10 @@ Run each case and retain the response:
 | malformed daemon JSON frame | `invalid_request`; connection can close without killing daemon |
 | protocol version mismatch | `protocol_mismatch` |
 | 64 MiB+ frame | rejected by framing limit |
+| bad params / Lean JSON-RPC decode rejection | `oracle_failure`; generation and Lean PID unchanged |
+| unknown Lean RPC method / ordinary RPC error | `oracle_failure`; generation and Lean PID unchanged |
 | kill Lean during oracle call | `lean_restarted`; generation increments |
+| graceful `atlas-live stop` | daemon exits and all Lean children owned by its project sessions are gone |
 | kill atlasd | daemonkit `repair` + `ensure` can recover |
 | 32 simultaneous starters | one daemon generation |
 | simultaneous CLI and MCP status | same daemon/project generation |
@@ -283,12 +314,37 @@ For this PR, explicitly validate the fixes that compose with M5:
 1. Lean JSON-RPC messages are classified by `method` before `id`; server requests are answered rather than consumed as Atlas responses.
 2. CI and manual live tests use `lean-server/lean-toolchain` / Lean `4.30.0`, not an ambient elan default.
 3. Lean process restart changes the Atlas project generation, and all handle-bearing requests require that generation.
-4. Transport/process failures become structured `lean_restarted`/`lean_degraded` service errors rather than null oracle answers.
-5. Existing store warrant/immutability tests and static-slice compatibility remain green.
+4. Dead stdio, broken transport/protocol synchronization, and stale Lean sessions become structured `lean_restarted`/`lean_degraded` service errors; ordinary JSON-RPC error responses remain `oracle_failure` and do not bump generation.
+5. Graceful daemon shutdown explicitly drains project sessions and reaps every owned Lean child before daemonkit reports the service stopped.
+6. Existing store warrant/immutability tests and static-slice compatibility remain green.
 
 Do not opportunistically alter deeper M4 oracle semantics (`apply`, `unify`, proof meaning, declaration snapshot policy) merely to make this milestone green. Those require independent semantic fixtures and should be handled as focused follow-ups from the audit rather than hidden inside daemon plumbing.
 
+The pre-existing store warrant holes are also not closed by M5 merely because store tests are green: empty derived provenance, missing Oracle/Formal evidence linkage, missing `relation_types` enforcement, and inconsistent warrant ordering remain separate P1 work.
+
 ## 14. Completion evidence
+
+Before declaring M5 complete, run a final graceful-stop observation with at least one live project:
+
+```bash
+# Record the atlasd PID and only the Lean --server children owned by it.
+ATLASD_PID="$(pgrep -f "$ATLASD" | head -n1)"
+LEAN_PIDS="$(ps -eo pid=,ppid=,args= | awk -v p="$ATLASD_PID" '$2 == p && /lean.*--server/ {print $1}')"
+printf 'atlasd=%s lean_children=%s\n' "$ATLASD_PID" "$LEAN_PIDS"
+
+"$ATLAS_LIVE" --atlasd "$ATLASD" stop
+
+for pid in $LEAN_PIDS; do
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "FAIL: leaked Lean child $pid" >&2
+    exit 1
+  fi
+done
+if kill -0 "$ATLASD_PID" 2>/dev/null; then
+  echo "FAIL: atlasd still alive $ATLASD_PID" >&2
+  exit 1
+fi
+```
 
 The validating agent should finish with a compact table containing:
 
@@ -297,6 +353,6 @@ The validating agent should finish with a compact table containing:
 - observed generations/PIDs where relevant;
 - pass/fail;
 - any discrepancy;
-- whether the discrepancy is an M5 regression or a pre-existing/deferred M4 semantic issue.
+- whether the discrepancy is an M5 regression or a pre-existing/deferred M4/store semantic issue.
 
-M5 is complete only when the observational acceptance criteria are satisfied, not merely when CI is green.
+M5 is complete only when the observational acceptance criteria are satisfied, not merely when CI is green. In particular, `stop` must leave neither `atlasd` nor any Lean child owned by its project sessions alive.
