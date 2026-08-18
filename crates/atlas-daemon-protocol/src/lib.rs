@@ -66,7 +66,7 @@ pub enum Request {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
+#[serde(tag = "response", rename_all = "snake_case")]
 pub enum Response {
     Ok { value: Value },
     Projects { projects: Vec<ProjectStatus> },
