@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "atlas-live-mcp"
+name = "atlas-mcp"
 path = "src/main.rs"
 
 [dependencies]
