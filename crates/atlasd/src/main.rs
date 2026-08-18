@@ -272,9 +272,7 @@ async fn handle_request_inner(
                 let mut projects = state.projects.lock().await;
                 projects
                     .entry(config.project_id.clone())
-                    .or_insert_with(|| {
-                        Arc::new(Mutex::new(ProjectSession::new(config.clone(), 1)))
-                    })
+                    .or_insert_with(|| Arc::new(Mutex::new(ProjectSession::new(config.clone(), 1))))
                     .clone()
             };
             let mut session = session.lock().await;
