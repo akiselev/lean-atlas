@@ -1,7 +1,9 @@
-use atlas_client::{AtlasClient, ClientError};
-use atlas_daemon_protocol::{
-    CloseDocumentRequest, Command, DocumentRequest, LeanLaunch, OpenProjectRequest,
-    ProjectMutationRequest, ProjectRequest, ResponsePayload,
+use atlas_client::{
+    AtlasClient, ClientError,
+    protocol::{
+        CloseDocumentRequest, Command, DocumentRequest, LeanLaunch, OpenProjectRequest,
+        ProjectMutationRequest, ProjectRequest, ResponsePayload,
+    },
 };
 use std::{env, path::Path};
 
