@@ -84,7 +84,22 @@ impl Transport {
             .await?;
         loop {
             let msg = self.read().await?;
-            if msg.get("id").and_then(Value::as_u64) != Some(id) {
+
+            // JSON-RPC requests and notifications must be classified before looking at
+            // `id`. Lean 4.30 sends client requests such as workspace/inlayHint/refresh
+            // with numeric ids while an Atlas request is in flight. Matching only on id
+            // can therefore deserialize the server request's absent result as our result
+            // (`hello: null`) and also leaves Lean waiting forever for its response.
+            if let Some(method) = msg.get("method").and_then(Value::as_str) {
+                if let Some(server_id) = msg.get("id").cloned() {
+                    self.reply_to_server_request(server_id, method).await?;
+                }
+                // Notifications have no response. Both kinds are out-of-band relative
+                // to the one client request this transport is synchronously awaiting.
+                continue;
+            }
+
+            if !is_response_for(&msg, id) {
                 continue;
             }
             if let Some(err) = msg.get("error") {
@@ -101,6 +116,24 @@ impl Transport {
                 msg.get("result").cloned().unwrap_or(Value::Null),
             )?);
         }
+    }
+
+    async fn reply_to_server_request(
+        &mut self,
+        id: Value,
+        method: &str,
+    ) -> Result<(), TransportError> {
+        // Lean currently uses refresh/progress/capability requests here. The LSP methods
+        // below either have a null result or, for workspace/configuration, a list result.
+        // Unknown requests get a null result rather than being dropped: blocking Lean's
+        // server request queue is more damaging than advertising this intentionally small
+        // headless-client capability surface.
+        let result = match method {
+            "workspace/configuration" => json!([]),
+            _ => Value::Null,
+        };
+        self.write(&json!({"jsonrpc":"2.0","id":id,"result":result}))
+            .await
     }
 
     pub async fn notify(&mut self, method: &str, params: Value) -> Result<(), TransportError> {
@@ -149,5 +182,28 @@ impl Transport {
         self.notify("exit", Value::Null).await?;
         let _ = self.child.wait().await;
         Ok(())
+    }
+}
+
+fn is_response_for(message: &Value, id: u64) -> bool {
+    message.get("method").is_none() && message.get("id").and_then(Value::as_u64) == Some(id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn server_request_cannot_alias_inflight_response_id() {
+        let refresh = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "workspace/inlayHint/refresh",
+            "params": null
+        });
+        assert!(!is_response_for(&refresh, 1));
+
+        let response = json!({"jsonrpc": "2.0", "id": 1, "result": null});
+        assert!(is_response_for(&response, 1));
     }
 }
