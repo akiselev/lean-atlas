@@ -1,11 +1,85 @@
 use crate::{EvalOptions, FactSource, Literal, LogicError, Program, Query, QueryRow, eval};
-use atlas_schema::{Bindings, FactId, FactRow, Provenance, RelationTypeId, Value};
+use atlas_schema::{
+    Bindings, Derivation, DerivationId, FactId, FactRow, FactWarrant, Provenance, RelationTypeId,
+    Value,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Evaluation {
     pub facts: Vec<FactRow>,
     pub rows: Vec<QueryRow>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DerivationExplanation {
+    pub derivation: Derivation,
+    pub warrant: FactWarrant,
+    pub supporting_facts: Vec<FactRow>,
+    pub missing_inputs: Vec<FactId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FactExplanation {
+    pub fact: FactRow,
+    pub derivations: Vec<DerivationExplanation>,
+    pub strongest_derivation: Option<DerivationId>,
+}
+
+impl Evaluation {
+    /// Explain one fact without collapsing alternative derivations into a false conjunction.
+    /// Each returned derivation is one OR branch; its `supporting_facts` are the AND inputs for
+    /// that branch. Callers can recursively explain those fact IDs as needed.
+    pub fn explain(&self, id: FactId) -> Option<FactExplanation> {
+        let fact = self.facts.iter().find(|fact| fact.id == id)?.clone();
+        let by_id = self
+            .facts
+            .iter()
+            .map(|fact| (fact.id, fact))
+            .collect::<BTreeMap<_, _>>();
+        let warrants = self
+            .facts
+            .iter()
+            .map(|fact| (fact.id, fact.warrant))
+            .collect::<BTreeMap<_, _>>();
+
+        let mut derivations = Vec::new();
+        for derivation in fact.provenance.derivations() {
+            let mut supporting_facts = Vec::new();
+            let mut missing_inputs = Vec::new();
+            for input in &derivation.inputs {
+                match by_id.get(input) {
+                    Some(input_fact) => supporting_facts.push((*input_fact).clone()),
+                    None => missing_inputs.push(*input),
+                }
+            }
+            derivations.push(DerivationExplanation {
+                warrant: eval::derivation_warrant(&warrants, &derivation),
+                derivation,
+                supporting_facts,
+                missing_inputs,
+            });
+        }
+
+        // `Provenance::derivations` is canonically ordered. Keep the first derivation on ties so
+        // the selected strongest alternative is deterministic without erasing weaker branches.
+        let mut strongest_derivation = None;
+        let mut strongest_warrant = FactWarrant::Heuristic;
+        for explanation in &derivations {
+            if strongest_derivation.is_none()
+                || explanation.warrant.is_stronger_than(strongest_warrant)
+            {
+                strongest_warrant = explanation.warrant;
+                strongest_derivation = Some(explanation.derivation.id.clone());
+            }
+        }
+
+        Some(FactExplanation {
+            fact,
+            derivations,
+            strongest_derivation,
+        })
+    }
 }
 
 pub fn evaluate_reference<S: FactSource>(
@@ -34,10 +108,13 @@ pub fn evaluate_reference<S: FactSource>(
     for r in rels {
         db.entry(r).or_default().extend(source.scan(r, &empty)?)
     }
-    let mut seen: BTreeSet<(RelationTypeId, Vec<Value>)> = db
+    eval::sort_db(&mut db);
+
+    let mut seen: BTreeSet<eval::FactKey> = db
         .iter()
         .flat_map(|(r, fs)| fs.iter().map(move |f| (*r, f.args.clone())))
         .collect();
+    let mut derived = eval::derived_index(&db);
     let mut next = db.values().flatten().map(|f| f.id.0).max().unwrap_or(0) + 1;
     for stratum in 0..=strata.values().copied().max().unwrap_or(0) {
         for round in 0..opts.max_rounds {
@@ -57,19 +134,25 @@ pub fn evaluate_reference<S: FactSource>(
                     else {
                         continue;
                     };
-                    if seen.insert((rule.head.relation, args.clone())) {
-                        let warrant = eval::derived_warrant(&db, &support);
+                    let key = (rule.head.relation, args.clone());
+                    let derivation = Derivation::new(rule.id.clone(), support);
+                    if let Some(id) = derived.get(&key).copied() {
+                        eval::attach_derivation(&mut db, id, derivation);
+                        continue;
+                    }
+                    if seen.insert(key.clone()) {
                         let f = FactRow {
                             id: FactId(next),
                             relation: rule.head.relation,
                             args,
-                            warrant,
-                            provenance: Provenance::Derived {
-                                rule: rule.id.clone(),
-                                inputs: support,
-                            },
+                            warrant: FactWarrant::Heuristic,
+                            provenance: Provenance::derived(
+                                derivation.rule.clone(),
+                                derivation.inputs.clone(),
+                            ),
                         };
                         next += 1;
+                        derived.insert(key, f.id);
                         db.entry(f.relation).or_default().push(f);
                         added += 1;
                     }
@@ -83,6 +166,8 @@ pub fn evaluate_reference<S: FactSource>(
             }
         }
     }
+
+    eval::recompute_derived_warrants(&mut db);
     let mut rows = eval::body(&db, &query.body)?
         .into_iter()
         .map(|(b, support)| QueryRow {
