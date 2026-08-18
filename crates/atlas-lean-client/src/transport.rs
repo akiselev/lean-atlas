@@ -63,8 +63,9 @@ impl Transport {
                     "processId": null,
                     "clientInfo": {"name": "lean-atlas", "version": env!("CARGO_PKG_VERSION")},
                     "rootUri": spec.root_uri,
-                    "capabilities": {},
-                    "initializationOptions": {"rpcWireFormat": "v1"}
+                    "capabilities": {
+                        "lean": {"rpcWireFormat": "v1"}
+                    }
                 }),
             )
             .await?;

@@ -1,11 +1,22 @@
 mod transport;
 
 use atlas_lean_protocol::{Position, RpcRef};
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use thiserror::Error;
 use transport::Transport;
 pub use transport::{LeanCommand, TransportError};
+
+/// Lean's RPC session identifier is an opaque wire value. Lean 4.30 encodes the
+/// `UInt64` session id as a JSON string in the v1 RPC wire format so JavaScript
+/// clients do not lose integer precision. Keep compatibility with numeric ids as
+/// well and, critically, send back the same representation we received.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SessionId {
+    Number(u64),
+    String(String),
+}
 
 #[derive(Debug, Error)]
 pub enum ClientError {
@@ -20,7 +31,7 @@ pub enum ClientError {
 pub struct LeanClient {
     transport: Transport,
     uri: String,
-    session_id: u64,
+    session_id: SessionId,
     position: Position,
     version: i64,
 }
@@ -31,7 +42,7 @@ impl LeanClient {
         Ok(Self {
             transport,
             uri: String::new(),
-            session_id: 0,
+            session_id: SessionId::Number(0),
             position: Position::default(),
             version: 0,
         })
@@ -45,9 +56,14 @@ impl LeanClient {
     ) -> Result<(), ClientError> {
         self.uri = uri.into();
         self.version = version;
-        self.transport.notify("textDocument/didOpen", json!({
-            "textDocument": {"uri": self.uri, "languageId": "lean4", "version": version, "text": text.into()}
-        })).await?;
+        self.transport
+            .notify(
+                "textDocument/didOpen",
+                json!({
+                    "textDocument": {"uri": self.uri, "languageId": "lean4", "version": version, "text": text.into()}
+                }),
+            )
+            .await?;
         self.connect().await
     }
 
@@ -57,9 +73,14 @@ impl LeanClient {
         version: i64,
     ) -> Result<(), ClientError> {
         self.version = version;
-        self.transport.notify("textDocument/didChange", json!({
-            "textDocument": {"uri": self.uri, "version": version}, "contentChanges": [{"text": text.into()}]
-        })).await?;
+        self.transport
+            .notify(
+                "textDocument/didChange",
+                json!({
+                    "textDocument": {"uri": self.uri, "version": version}, "contentChanges": [{"text": text.into()}]
+                }),
+            )
+            .await?;
         Ok(())
     }
 
@@ -72,18 +93,18 @@ impl LeanClient {
     pub fn document_version(&self) -> i64 {
         self.version
     }
-    pub fn session_id(&self) -> u64 {
-        self.session_id
+    pub fn session_id(&self) -> &SessionId {
+        &self.session_id
     }
     pub async fn reconnect(&mut self) -> Result<(), ClientError> {
         self.connect().await
     }
 
     async fn connect(&mut self) -> Result<(), ClientError> {
-        #[derive(serde::Deserialize)]
+        #[derive(Deserialize)]
         struct Connected {
             #[serde(rename = "sessionId")]
-            session_id: u64,
+            session_id: SessionId,
         }
         let connected: Connected = self
             .transport
@@ -97,7 +118,7 @@ impl LeanClient {
         self.transport
             .notify(
                 "$/lean/rpc/keepAlive",
-                json!({"uri":self.uri,"sessionId":self.session_id}),
+                json!({"uri":self.uri,"sessionId":self.session_id.clone()}),
             )
             .await?;
         Ok(())
@@ -113,7 +134,7 @@ impl LeanClient {
         let outer = json!({
             "textDocument": {"uri": self.uri},
             "position": {"line": self.position.line, "character": self.position.character},
-            "sessionId": self.session_id, "method": method, "params": encoded
+            "sessionId": self.session_id.clone(), "method": method, "params": encoded
         });
         match self.transport.request("$/lean/rpc/call", outer).await {
             Ok(value) => Ok(value),
@@ -137,12 +158,13 @@ impl LeanClient {
     ) -> Result<(), ClientError> {
         let refs = refs
             .into_iter()
-            .map(|r| json!({"__rpcref":r.id}))
-            .collect::<Vec<Value>>();
+            .map(serde_json::to_value)
+            .collect::<Result<Vec<Value>, _>>()
+            .map_err(TransportError::Json)?;
         self.transport
             .notify(
                 "$/lean/rpc/release",
-                json!({"uri":self.uri,"sessionId":self.session_id,"refs":refs}),
+                json!({"uri":self.uri,"sessionId":self.session_id.clone(),"refs":refs}),
             )
             .await?;
         Ok(())

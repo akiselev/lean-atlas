@@ -3,8 +3,13 @@ import Lean.Server.Rpc
 namespace Atlas.Server
 open Lean Server
 
-unsafe instance : TypeName Lean.Name := TypeName.mk Lean.Name ``Lean.Name
-unsafe instance : TypeName Lean.Expr := TypeName.mk Lean.Expr ``Lean.Expr
+-- `TypeName.mk` is unsafe because Lean cannot prove that the supplied name
+-- denotes exactly the supplied type. Keep the *instance declaration* safe and
+-- confine that escape hatch to the value, matching Lean's own RPC code. An
+-- `unsafe instance` would make every derived `RpcEncodable` containing a
+-- `WithRpcRef` unsafe and is rejected by the kernel/compiler.
+instance : TypeName Lean.Name := unsafe (TypeName.mk Lean.Name ``Lean.Name)
+instance : TypeName Lean.Expr := unsafe (TypeName.mk Lean.Expr ``Lean.Expr)
 
 structure HelloRequest where
   atlas_protocol : String
@@ -81,7 +86,7 @@ structure SynthInstanceRequest where
   deriving RpcEncodable
 
 structure SynthInstanceResponse where
-  instance : WithRpcRef Lean.Expr
+  «instance» : WithRpcRef Lean.Expr
   dependencies : Array String
   pretty : String
   deriving RpcEncodable

@@ -1,5 +1,5 @@
 use crate::{Literal, LogicError, Program, Term, bind_atom, eval_term};
-use atlas_schema::{Bindings, FactId, FactRow, RelationTypeId};
+use atlas_schema::{Bindings, FactId, FactRow, FactWarrant, RelationTypeId};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn body(
@@ -40,6 +40,21 @@ pub(crate) fn body(
         }
     }
     Ok(states)
+}
+
+/// Datalog inference is structural at best, and can never strengthen the weakest
+/// supporting fact. This makes heuristic/numerical inputs remain heuristic downstream.
+pub(crate) fn derived_warrant(
+    db: &BTreeMap<RelationTypeId, Vec<FactRow>>,
+    support: &[FactId],
+) -> FactWarrant {
+    let mut warrant = FactWarrant::Structural;
+    for id in support {
+        if let Some(fact) = db.values().flatten().find(|fact| fact.id == *id) {
+            warrant = warrant.weaker(fact.warrant);
+        }
+    }
+    warrant
 }
 
 fn eq(a: &Term, b: &Term, bs: &mut Bindings) -> bool {
