@@ -1,8 +1,10 @@
-use atlas_daemon_protocol::{
+pub use atlas_daemon_protocol as protocol;
+
+use daemonkit::{Daemon, DaemonSpec, Embedded, RepairOutcome, Spawn, StopOutcome};
+use protocol::{
     Command, MAX_FRAME_BYTES, Outcome, PROTOCOL_VERSION, Request, Response, ResponsePayload,
     ServiceError,
 };
-use daemonkit::{Daemon, DaemonSpec, Embedded, RepairOutcome, Spawn, StopOutcome};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
