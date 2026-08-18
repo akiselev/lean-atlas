@@ -1,8 +1,7 @@
 mod migration;
 
 use atlas_schema::{
-    FactId, FactRow, FactValidationError, FactWarrant, Provenance, RelationTypeId, SourceEvidence,
-    Value,
+    FactId, FactRow, FactValidationError, FactWarrant, Provenance, RelationTypeId, Value,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
@@ -49,7 +48,7 @@ impl Store {
 
     /// Persist one immutable fact. Validation lives at this boundary rather than only
     /// in higher-level relation constructors: every write must prove that its warrant
-    /// is no stronger than its provenance and (for derived facts) its weakest input.
+    /// is no stronger than its provenance and retained derivation alternatives support.
     pub fn insert_fact(&mut self, f: &FactRow) -> Result<(), StoreError> {
         self.validate_for_insert(f)?;
         if self.fact(f.id)?.is_some() {
@@ -78,22 +77,29 @@ impl Store {
 
     fn validate_for_insert(&self, f: &FactRow) -> Result<(), StoreError> {
         f.validate_intrinsic_warrant()?;
-        if let Provenance::Derived { inputs, .. } = &f.provenance {
-            let mut supported = FactWarrant::Structural;
-            for input in inputs {
-                let Some(input_fact) = self.fact(*input)? else {
-                    return Err(StoreError::MissingSupport {
-                        fact: f.id,
-                        support: *input,
-                    });
-                };
-                supported = supported.weaker(input_fact.warrant);
+        if matches!(f.provenance, Provenance::Derived { .. }) {
+            // Inputs inside one derivation are AND supports, but derivations themselves are OR
+            // alternatives. The fact may therefore claim the strongest warrant supplied by any
+            // complete derivation, subject to the structural ceiling checked intrinsically.
+            let mut strongest = FactWarrant::Heuristic;
+            for derivation in f.provenance.derivations() {
+                let mut supported = FactWarrant::Structural;
+                for input in derivation.inputs {
+                    let Some(input_fact) = self.fact(input)? else {
+                        return Err(StoreError::MissingSupport {
+                            fact: f.id,
+                            support: input,
+                        });
+                    };
+                    supported = supported.weaker(input_fact.warrant);
+                }
+                strongest = strongest.stronger(supported);
             }
-            if f.warrant.is_stronger_than(supported) {
+            if f.warrant.is_stronger_than(strongest) {
                 return Err(StoreError::InvalidFact(FactValidationError {
                     claimed: f.warrant,
-                    supported,
-                    provenance_kind: "derived support",
+                    supported: strongest,
+                    provenance_kind: "derived alternatives",
                 }));
             }
         }
@@ -181,6 +187,7 @@ fn parse_warrant(w: &str) -> Result<FactWarrant, StoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use atlas_schema::{Derivation, SourceEvidence};
 
     fn source_fact(id: u64, warrant: FactWarrant, evidence: SourceEvidence) -> FactRow {
         FactRow {
@@ -240,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn derived_warrant_cannot_exceed_weakest_input() {
+    fn derived_warrant_cannot_exceed_weakest_input_of_its_only_derivation() {
         let mut s = Store::memory().unwrap();
         let input = source_fact(1, FactWarrant::Heuristic, SourceEvidence::Numerical);
         s.insert_fact(&input).unwrap();
@@ -249,14 +256,34 @@ mod tests {
             relation: RelationTypeId(3),
             args: vec![],
             warrant: FactWarrant::Structural,
-            provenance: Provenance::Derived {
-                rule: "r".into(),
-                inputs: vec![input.id],
-            },
+            provenance: Provenance::derived("r", vec![input.id]),
         };
         assert!(matches!(
             s.insert_fact(&derived),
             Err(StoreError::InvalidFact(_))
         ));
+    }
+
+    #[test]
+    fn strongest_alternative_can_justify_fact_without_erasing_weaker_path() {
+        let mut s = Store::memory().unwrap();
+        let structural = source_fact(1, FactWarrant::Structural, SourceEvidence::Structural);
+        let heuristic = source_fact(2, FactWarrant::Heuristic, SourceEvidence::Numerical);
+        s.insert_fact(&structural).unwrap();
+        s.insert_fact(&heuristic).unwrap();
+
+        let mut provenance = Provenance::derived("r", vec![heuristic.id]);
+        assert!(provenance.add_derivation(Derivation::new("r", vec![structural.id])));
+        let derived = FactRow {
+            id: FactId(3),
+            relation: RelationTypeId(3),
+            args: vec![],
+            warrant: FactWarrant::Structural,
+            provenance,
+        };
+        s.insert_fact(&derived).unwrap();
+        let stored = s.fact(derived.id).unwrap().unwrap();
+        assert_eq!(stored.provenance.derivations().len(), 2);
+        assert_eq!(stored.warrant, FactWarrant::Structural);
     }
 }
