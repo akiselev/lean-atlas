@@ -125,7 +125,9 @@ def main() -> None:
 
     atlas_live = os.path.realpath(args.atlas_live)
     atlasd = os.path.realpath(args.atlasd)
-    lean = os.path.realpath(args.lean)
+    # Preserve the lean shim path/argv[0]. Resolving ~/.elan/bin/lean to the elan
+    # multiplexer binary can change which tool elan believes it was invoked as.
+    lean = os.path.abspath(args.lean)
     plugin = os.path.realpath(args.plugin)
     workdir = os.path.realpath(args.workdir)
     fixture = os.path.realpath(args.fixture)
