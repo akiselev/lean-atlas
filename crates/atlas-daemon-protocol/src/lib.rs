@@ -45,8 +45,12 @@ pub struct ProjectStatus {
 pub enum Request {
     Ping,
     Status,
-    EnsureProject { config: ProjectConfig },
-    CloseProject { project_id: String },
+    EnsureProject {
+        config: ProjectConfig,
+    },
+    CloseProject {
+        project_id: String,
+    },
     OpenDocument {
         token: SessionToken,
         document: DocumentOverlay,
@@ -56,7 +60,9 @@ pub enum Request {
         text: String,
         version: i64,
     },
-    RestartLean { project_id: String },
+    RestartLean {
+        project_id: String,
+    },
     OracleCall {
         token: SessionToken,
         position: atlas_position::Position,
@@ -77,23 +83,38 @@ pub enum Response {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ServiceError {
-    ProtocolMismatch { expected: u32, observed: u32 },
-    ProjectNotFound { project_id: String },
+    ProtocolMismatch {
+        expected: u32,
+        observed: u32,
+    },
+    ProjectNotFound {
+        project_id: String,
+    },
     StaleSession {
         project_id: String,
         expected_generation: u64,
         observed_generation: u64,
     },
-    LeanDegraded { project_id: String, message: String },
+    LeanDegraded {
+        project_id: String,
+        message: String,
+    },
     LeanRestarted {
         project_id: String,
         old_generation: u64,
         new_generation: u64,
         cause: String,
     },
-    OracleFailure { project_id: String, message: String },
-    InvalidRequest { message: String },
-    Internal { message: String },
+    OracleFailure {
+        project_id: String,
+        message: String,
+    },
+    InvalidRequest {
+        message: String,
+    },
+    Internal {
+        message: String,
+    },
 }
 
 /// Kept local to this wire crate so M5 does not make the daemon protocol depend on
