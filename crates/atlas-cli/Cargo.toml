@@ -6,6 +6,5 @@ license.workspace = true
 
 [dependencies]
 atlas-client.workspace = true
-atlas-daemon-protocol.workspace = true
 serde_json.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
