@@ -1,6 +1,6 @@
 # M5 `atlasd` agent validation plan
 
-This is a manual/observational validation runbook. Passing `cargo test` is necessary but is not sufficient to close M5. An agent executing this plan must preserve the commands it ran, the JSON returned by Atlas, PIDs/generations observed, and any unexpected stderr.
+This is a manual/observational validation runbook. Passing `cargo test` or the automated `scripts/m5-atlasd-smoke.py` CI smoke is necessary but is not sufficient to close M5. An agent executing this plan must preserve the commands it ran, the JSON returned by Atlas, PIDs/generations observed, and any unexpected stderr.
 
 ## 1. Build and environment
 
@@ -62,26 +62,21 @@ for i in $(seq 1 16); do
 done
 wait
 jq -r '.value.daemon_generation' /tmp/atlas-m5-race/*.json | sort | uniq -c
+jq -r '.value.process_id' /tmp/atlas-m5-race/*.json | sort -n | uniq -c
 ```
 
 Expected:
 
 - all 16 commands succeed;
 - exactly one daemon generation appears;
-- no client reports bootstrap/authentication/state corruption;
-- there is only one live `atlasd` process for the daemonkit identity.
+- exactly one daemon PID appears;
+- no client reports bootstrap/authentication/state corruption.
 
-Observe rather than infer the process count:
-
-```bash
-pgrep -af 'target/.*/atlasd|/atlasd' || true
-```
-
-On Windows use `Get-Process atlasd` and record the result.
+The PID is reported by the authenticated daemon itself; process-name matching is not the acceptance oracle. You may still record `ps`, `pgrep`, or `Get-Process atlasd` output as secondary evidence.
 
 ## 3. CLI and MCP share the same daemon
 
-Capture the CLI generation:
+Capture the CLI generation and daemon PID:
 
 ```bash
 cargo run -q -p atlas-cli -- ping | tee /tmp/atlas-m5-cli-ping.json
@@ -106,7 +101,7 @@ printf '%s\n' \
   | tee /tmp/atlas-m5-mcp.jsonl
 ```
 
-Expected: the `daemon_generation` embedded in the MCP tool result is byte-for-byte identical to the CLI generation. This is the primary M5 evidence that the two frontends attach to one daemon rather than each owning a private server.
+Expected: both `daemon_generation` and `process_id` embedded in the MCP tool result are byte-for-byte/numerically identical to the CLI ping. This is the primary M5 evidence that the two frontends attach to one daemon rather than each owning a private server.
 
 ## 4. Project session and persistent semantic store
 
@@ -166,7 +161,9 @@ Expected:
 Change the same overlay to version 101:
 
 ```bash
-printf '-- version-101\n%s' "$(cat /tmp/atlas-m5-overlay.lean)" >/tmp/atlas-m5-overlay-v101.lean
+printf '%s' '-- version-101' > /tmp/atlas-m5-overlay-v101.lean
+printf '\n' >> /tmp/atlas-m5-overlay-v101.lean
+cat /tmp/atlas-m5-overlay.lean >> /tmp/atlas-m5-overlay-v101.lean
 cargo run -q -p atlas-cli -- change-document \
   "$PROJECT_ID" "$FIXTURE_URI" /tmp/atlas-m5-overlay-v101.lean 101 "$LEAN_GEN" \
   | tee /tmp/atlas-m5-change-overlay.json
@@ -206,6 +203,8 @@ cat /tmp/atlas-m5-stale.err
 
 Expected: non-zero exit and a structured `stale_lean_generation` error. The old generation must never be silently accepted.
 
+Also validate the multi-document selection edge: open a second synthetic URI, then close that currently selected overlay while leaving the first open. A following `status` must remain `ready`; closing one overlay must not orphan the RPC session for the surviving documents. The automated CI smoke exercises this exact sequence, but record it manually as well.
+
 ## 7. Unexpected Lean crash and service recovery
 
 Kill the observed Lean child directly:
@@ -216,7 +215,7 @@ kill -KILL "$LEAN_PID_2"
 
 On Windows use `Stop-Process -Id $LEAN_PID_2 -Force`.
 
-Issue a status request:
+Issue status requests until the dead pipe/process is observed. Preserve every response; do not hide the detecting request behind a retry loop.
 
 ```bash
 set +e
@@ -228,7 +227,7 @@ printf 'exit=%s\n' "$rc"
 cat /tmp/atlas-m5-after-lean-crash.out /tmp/atlas-m5-after-lean-crash.err
 ```
 
-Expected on the detecting request: a structured `lean_restarted` result/error carrying the new project snapshot, or `lean_unavailable` if restart genuinely failed. It must not be a generic broken pipe/panic.
+Expected on the detecting request: a structured `lean_restarted` error carrying the new project snapshot. `lean_unavailable` is acceptable only when restart genuinely failed and must then be investigated; a generic broken pipe or panic is not acceptable.
 
 Then retry:
 
@@ -246,7 +245,16 @@ Expected:
 
 ## 8. Unexpected daemon crash and daemonkit repair
 
-Record the daemon generation from `ping`, identify the atlasd PID, then kill it with `SIGKILL`/`Stop-Process -Force`. Do not use `daemon-stop` for this test.
+Record the authenticated daemon generation and PID, then kill exactly that process. Do not use `daemon-stop` for this test.
+
+```bash
+cargo run -q -p atlas-cli -- ping | tee /tmp/atlas-m5-before-daemon-crash.json
+export DAEMON_GEN="$(jq -r '.value.daemon_generation' /tmp/atlas-m5-before-daemon-crash.json)"
+export DAEMON_PID="$(jq -r '.value.process_id' /tmp/atlas-m5-before-daemon-crash.json)"
+kill -KILL "$DAEMON_PID"
+```
+
+On Windows use `Stop-Process -Id $DAEMON_PID -Force`.
 
 Immediately run:
 
@@ -259,7 +267,7 @@ Expected:
 
 - repair does not delete state belonging to a live successor;
 - the next `ping` starts/attaches to one healthy daemon;
-- its daemon generation differs from the killed generation;
+- both its daemon generation and PID differ from the killed daemon;
 - no manual deletion of daemonkit runtime files is required.
 
 Re-open the same project:
@@ -313,7 +321,7 @@ Attach or retain:
 - CLI and MCP ping outputs;
 - project/open/change/restart/status JSON;
 - crash-detection stdout/stderr and exit codes;
-- process listings before/after race, Lean restart, Lean crash, and daemon crash;
+- daemon and Lean PIDs/generations before/after race, restart, and forced crashes;
 - store path, size, and digest;
 - `git diff --stat` and `git status --short` after the run;
 - exact Rust/Lean/plugin versions.
@@ -321,7 +329,7 @@ Attach or retain:
 M5 passes only if every acceptance property was observed, not merely inferred from unit tests:
 
 1. concurrent CLI and MCP clients share one authenticated daemon;
-2. startup races produce one daemon generation;
+2. startup races produce one daemon generation and one daemon PID;
 3. daemon crash is repairable through daemonkit;
 4. Lean crash becomes a structured degradation/restart event;
 5. stale Lean generations cannot mutate a successor;
