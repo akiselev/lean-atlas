@@ -447,10 +447,7 @@ fn lean_error_requires_restart(error: &LeanError) -> bool {
     }
 }
 
-async fn service_error_from_lean(
-    session: &mut ProjectSession,
-    error: LeanError,
-) -> ServiceError {
+async fn service_error_from_lean(session: &mut ProjectSession, error: LeanError) -> ServiceError {
     if lean_error_requires_restart(&error) {
         restart_error(session, error).await
     } else {
