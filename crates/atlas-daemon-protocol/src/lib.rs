@@ -91,6 +91,7 @@ pub enum ServiceError {
         new_generation: u64,
         cause: String,
     },
+    OracleFailure { project_id: String, message: String },
     InvalidRequest { message: String },
     Internal { message: String },
 }
