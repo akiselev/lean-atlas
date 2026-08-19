@@ -20,8 +20,10 @@ CREATE TABLE IF NOT EXISTS assays(id INTEGER PRIMARY KEY,external_id TEXT,payloa
 INSERT OR IGNORE INTO schema_migrations(version) VALUES(1);
 "#;
 
-/// Additive research-v3 ledger. Legacy v1 tables remain readable while callers
-/// migrate from scalar warrants to immutable claims and typed evidence.
+/// Additive research-v3 storage. Semantic identities, provenance, claims and
+/// evidence are append-only. Proposals, falsifiers, plans, observed runs and
+/// assessments remain mutable provisional workspace state while Atlas itself is
+/// being validated; persistence alone never promotes an experimental result.
 pub const V2: &str = r#"
 PRAGMA foreign_keys = ON;
 
@@ -106,6 +108,9 @@ CREATE TABLE IF NOT EXISTS challenges_v3(
 CREATE INDEX IF NOT EXISTS challenges_v3_by_claim
   ON challenges_v3(target_claim_id, id);
 
+-- The following tables describe an evolving research workflow. Their rows may
+-- be revised or discarded until a result is represented by immutable receipts,
+-- claim revisions and evidence records above.
 CREATE TABLE IF NOT EXISTS research_proposals_v3(
   id INTEGER PRIMARY KEY,
   generator_receipt_id INTEGER NOT NULL REFERENCES receipts_v3(id),
@@ -164,16 +169,134 @@ CREATE TRIGGER IF NOT EXISTS support_circuits_v3_no_update BEFORE UPDATE ON supp
 CREATE TRIGGER IF NOT EXISTS support_circuits_v3_no_delete BEFORE DELETE ON support_circuits_v3 BEGIN SELECT RAISE(ABORT, 'support_circuits_v3 is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS challenges_v3_no_update BEFORE UPDATE ON challenges_v3 BEGIN SELECT RAISE(ABORT, 'challenges_v3 is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS challenges_v3_no_delete BEFORE DELETE ON challenges_v3 BEGIN SELECT RAISE(ABORT, 'challenges_v3 is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS research_proposals_v3_no_update BEFORE UPDATE ON research_proposals_v3 BEGIN SELECT RAISE(ABORT, 'research_proposals_v3 is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS research_proposals_v3_no_delete BEFORE DELETE ON research_proposals_v3 BEGIN SELECT RAISE(ABORT, 'research_proposals_v3 is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS falsifiers_v3_no_update BEFORE UPDATE ON falsifiers_v3 BEGIN SELECT RAISE(ABORT, 'falsifiers_v3 is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS falsifiers_v3_no_delete BEFORE DELETE ON falsifiers_v3 BEGIN SELECT RAISE(ABORT, 'falsifiers_v3 is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS research_plans_v3_no_update BEFORE UPDATE ON research_plans_v3 BEGIN SELECT RAISE(ABORT, 'research_plans_v3 is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS research_plans_v3_no_delete BEFORE DELETE ON research_plans_v3 BEGIN SELECT RAISE(ABORT, 'research_plans_v3 is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS research_runs_v3_no_update BEFORE UPDATE ON research_runs_v3 BEGIN SELECT RAISE(ABORT, 'research_runs_v3 is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS research_runs_v3_no_delete BEFORE DELETE ON research_runs_v3 BEGIN SELECT RAISE(ABORT, 'research_runs_v3 is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS claim_assessments_v3_no_update BEFORE UPDATE ON claim_assessments_v3 BEGIN SELECT RAISE(ABORT, 'claim_assessments_v3 is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS claim_assessments_v3_no_delete BEFORE DELETE ON claim_assessments_v3 BEGIN SELECT RAISE(ABORT, 'claim_assessments_v3 is append-only'); END;
 
 INSERT OR IGNORE INTO schema_migrations(version) VALUES(2);
 "#;
+
+#[cfg(test)]
+mod tests {
+    use crate::Store;
+    use rusqlite::params;
+
+    #[test]
+    fn workflow_records_remain_revisable_during_validation() {
+        let store = Store::memory().unwrap();
+
+        store
+            .conn
+            .execute(
+                "INSERT INTO relation_schemas_v3(id,wire_name,version,schema_json) VALUES(1,'test',1,'{}')",
+                [],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO claim_scopes_v3(id,scope_json,content_digest_json) VALUES(1,'{}','scope')",
+                [],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO receipts_v3(id,schema_json,producer_json,receipt_json) VALUES(1,'{}','{}','{}')",
+                [],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO claim_revisions_v3(id,stable_key,kind,relation_schema_id,scope_id,content_digest_json,claim_json) VALUES(1,1,'candidate',1,1,'claim','{}')",
+                [],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO research_proposals_v3(id,generator_receipt_id,world_json,proposal_json) VALUES(1,1,'{}','{}')",
+                [],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO falsifiers_v3(id,proposal_id,target_local_id,falsifier_json) VALUES(1,1,1,'{}')",
+                [],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO research_plans_v3(id,proposal_id,content_digest_json,plan_json) VALUES(1,1,'plan','{}')",
+                [],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO research_runs_v3(id,plan_id,content_digest_json,run_json) VALUES(1,1,'run','{}')",
+                [],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO claim_assessments_v3(id,claim_id,policy_id,evidence_snapshot_json,assessment_json) VALUES(1,1,1,'{}','{}')",
+                [],
+            )
+            .unwrap();
+
+        for table in [
+            "research_proposals_v3",
+            "falsifiers_v3",
+            "research_plans_v3",
+            "research_runs_v3",
+            "claim_assessments_v3",
+        ] {
+            let sql = format!("UPDATE {table} SET id=id WHERE id=1");
+            store.conn.execute(&sql, []).unwrap();
+        }
+
+        store
+            .conn
+            .execute(
+                "UPDATE research_runs_v3 SET run_json=?1 WHERE id=1",
+                params![r#"{"revision":2}"#],
+            )
+            .unwrap();
+        let stored: String = store
+            .conn
+            .query_row(
+                "SELECT run_json FROM research_runs_v3 WHERE id=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored, r#"{"revision":2}"#);
+
+        store
+            .conn
+            .execute("DELETE FROM research_runs_v3 WHERE id=1", [])
+            .unwrap();
+    }
+
+    #[test]
+    fn semantic_and_provenance_records_remain_append_only() {
+        let store = Store::memory().unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO relation_schemas_v3(id,wire_name,version,schema_json) VALUES(1,'test',1,'{}')",
+                [],
+            )
+            .unwrap();
+        let error = store
+            .conn
+            .execute(
+                "UPDATE relation_schemas_v3 SET wire_name='changed' WHERE id=1",
+                [],
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("append-only"));
+    }
+}
