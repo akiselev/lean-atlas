@@ -194,6 +194,7 @@ pub enum ErrorCode {
     StaleLeanGeneration,
     LeanUnavailable,
     LeanRestarted,
+    OracleFailure,
     StoreUnavailable,
     Internal,
 }
