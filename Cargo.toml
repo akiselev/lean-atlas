@@ -7,7 +7,12 @@ members = [
   "crates/atlas-logic",
   "crates/atlas-lean-protocol",
   "crates/atlas-lean-client",
+  "crates/atlas-daemon-protocol",
+  "crates/atlas-client",
   "crates/atlas-engine",
+  "crates/atlasd",
+  "crates/atlas-cli",
+  "crates/atlas-mcp",
   "crates/atlas",
   "crates/atlas-py",
 ]
@@ -24,7 +29,10 @@ atlas-store = { path = "crates/atlas-store" }
 atlas-logic = { path = "crates/atlas-logic" }
 atlas-lean-protocol = { path = "crates/atlas-lean-protocol" }
 atlas-lean-client = { path = "crates/atlas-lean-client" }
+atlas-daemon-protocol = { path = "crates/atlas-daemon-protocol" }
+atlas-client = { path = "crates/atlas-client" }
 atlas-engine = { path = "crates/atlas-engine" }
+daemonkit = { git = "https://github.com/akiselev/daemonkit", rev = "9f7dc96b343f8c892add1a0fee27ad6f73c15e57" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

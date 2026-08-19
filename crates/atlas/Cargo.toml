@@ -4,6 +4,19 @@ description = "Semantic indexes over elaborated Lean environments (see atlas.md)
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+autobins = false
+
+[[bin]]
+name = "atlas"
+path = "src/bin/atlas.rs"
+
+[[bin]]
+name = "atlas-intuition"
+path = "src/bin/atlas-intuition.rs"
+
+[[bin]]
+name = "atlas-static-mcp"
+path = "src/bin/atlas-mcp.rs"
 
 [dependencies]
 sha2 = "0.11.0"

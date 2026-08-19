@@ -1,0 +1,14 @@
+[package]
+name = "atlas-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "atlas-mcp"
+path = "src/main.rs"
+
+[dependencies]
+atlas-client.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["io-util", "rt-multi-thread", "macros"] }

@@ -1,0 +1,16 @@
+[package]
+name = "atlasd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+atlas-daemon-protocol.workspace = true
+atlas-engine.workspace = true
+daemonkit.workspace = true
+futures-util = "0.3"
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+thiserror.workspace = true
+tokio = { version = "1", features = ["io-util", "process", "rt-multi-thread", "macros", "sync", "time", "fs"] }

@@ -4,6 +4,9 @@
 # Rust
 target/
 
+# Atlas daemon project-local persistent state
+.lean-atlas/
+
 # Editors
 .vscode/
 .idea/

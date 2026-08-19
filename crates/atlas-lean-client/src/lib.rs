@@ -48,6 +48,10 @@ impl LeanClient {
         })
     }
 
+    pub fn process_id(&self) -> Option<u32> {
+        self.transport.process_id()
+    }
+
     pub async fn open_document(
         &mut self,
         uri: impl Into<String>,
@@ -67,11 +71,16 @@ impl LeanClient {
         self.connect().await
     }
 
-    pub async fn change_document(
+    /// Replace an already-open document by URI. This is the daemon-facing
+    /// primitive: `atlasd` can retain multiple unsaved buffers in Lean even
+    /// though the typed oracle client has one selected RPC document at a time.
+    pub async fn change_document_at(
         &mut self,
+        uri: impl Into<String>,
         text: impl Into<String>,
         version: i64,
     ) -> Result<(), ClientError> {
+        self.uri = uri.into();
         self.version = version;
         self.transport
             .notify(
@@ -81,7 +90,43 @@ impl LeanClient {
                 }),
             )
             .await?;
+        // Editing invalidates Lean's old RPC environment. Establish a fresh
+        // session immediately so daemon clients never inherit a pre-edit handle
+        // generation by accident.
+        self.connect().await
+    }
+
+    pub async fn change_document(
+        &mut self,
+        text: impl Into<String>,
+        version: i64,
+    ) -> Result<(), ClientError> {
+        let uri = self.uri.clone();
+        self.change_document_at(uri, text, version).await
+    }
+
+    pub async fn close_document(&mut self, uri: impl Into<String>) -> Result<(), ClientError> {
+        let uri = uri.into();
+        self.transport
+            .notify(
+                "textDocument/didClose",
+                json!({"textDocument": {"uri": uri}}),
+            )
+            .await?;
+        if self.uri == uri {
+            self.uri.clear();
+            self.session_id = SessionId::Number(0);
+            self.version = 0;
+        }
         Ok(())
+    }
+
+    /// Select an already-open Lean document as the current RPC target without
+    /// sending another `didOpen`. This keeps multi-document overlays distinct
+    /// from the single document/session selected for typed RPC calls.
+    pub async fn select_document(&mut self, uri: impl Into<String>) -> Result<(), ClientError> {
+        self.uri = uri.into();
+        self.connect().await
     }
 
     pub fn set_position(&mut self, position: Position) {
