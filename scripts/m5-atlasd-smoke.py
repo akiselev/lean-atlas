@@ -74,6 +74,19 @@ def overlay(snapshot: dict, uri: str) -> dict:
     return matches[0]
 
 
+def pid_exists(pid: int) -> bool:
+    return Path(f"/proc/{pid}").exists()
+
+
+def wait_for_pid_exit(pid: int, timeout: float = 10.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not pid_exists(pid):
+            return True
+        time.sleep(0.05)
+    return not pid_exists(pid)
+
+
 def mcp_ping() -> dict:
     requests = [
         {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
@@ -226,6 +239,7 @@ def main() -> None:
         assert lean_generation_2 > lean_generation
         assert lean_pid_2 != lean_pid
         assert overlay(restarted, FIXTURE_URI)["version"] == 101
+        assert wait_for_pid_exit(lean_pid), f"old Lean child {lean_pid} survived restart"
 
         stale = run_cli(
             "change-document",
@@ -295,7 +309,21 @@ def main() -> None:
     assert Path(reopened_after_crash["store_path"]).is_file()
     assert reopened_after_crash["overlay_documents"] == []
 
+    # Closing a project must gracefully reap its owned Lean process while the
+    # daemon remains available for another project generation.
+    close_generation = int(reopened_after_crash["lean"]["generation"])
+    close_lean_pid = int(reopened_after_crash["lean"]["process_id"])
+    closed = payload(run_cli("close-project", project_id, str(close_generation)))
+    assert closed["type"] == "closed", closed
+    assert closed["value"]["project_id"] == project_id, closed
+    assert wait_for_pid_exit(close_lean_pid), f"Lean child {close_lean_pid} survived close-project"
+
+    final_project = project(run_cli("open-project", str(ROOT)))
+    final_lean_pid = int(final_project["lean"]["process_id"])
+    final_daemon_pid = int(after_daemon_crash["process_id"])
     run_cli("daemon-stop")
+    assert wait_for_pid_exit(final_lean_pid), f"Lean child {final_lean_pid} survived daemon-stop"
+    assert wait_for_pid_exit(final_daemon_pid), f"atlasd {final_daemon_pid} survived daemon-stop"
     print("M5 atlasd live smoke: PASS")
 
 
