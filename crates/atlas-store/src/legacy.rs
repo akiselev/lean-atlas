@@ -40,11 +40,15 @@ pub fn classify_legacy_fact(fact: &FactRow) -> LegacyImportDiagnostic {
             ),
             SourceEvidence::Formal => (
                 LegacyDisposition::FormalEvidencePendingReceipt,
-                format!("formal source {source:?} was explicitly downgraded; retain that downgrade"),
+                format!(
+                    "formal source {source:?} was explicitly downgraded; retain that downgrade"
+                ),
             ),
             SourceEvidence::Structural => (
                 LegacyDisposition::StructuralEvidenceCandidate,
-                format!("structural source {source:?} requires an explicit comparator or derivation record"),
+                format!(
+                    "structural source {source:?} requires an explicit comparator or derivation record"
+                ),
             ),
             SourceEvidence::Assertion => (
                 LegacyDisposition::DocumentaryEvidenceCandidate,
@@ -52,15 +56,21 @@ pub fn classify_legacy_fact(fact: &FactRow) -> LegacyImportDiagnostic {
             ),
             SourceEvidence::Empirical => (
                 LegacyDisposition::EmpiricalEvidenceCandidate,
-                format!("empirical source {source:?} requires a dataset/observation receipt and scope"),
+                format!(
+                    "empirical source {source:?} requires a dataset/observation receipt and scope"
+                ),
             ),
             SourceEvidence::Numerical => (
                 LegacyDisposition::NumericalEvidenceCandidate,
-                format!("numerical source {source:?} requires executable, inputs, environment and run receipt"),
+                format!(
+                    "numerical source {source:?} requires executable, inputs, environment and run receipt"
+                ),
             ),
             SourceEvidence::Heuristic => (
                 LegacyDisposition::ResearchProposal,
-                format!("heuristic source {source:?} is proposal/search metadata, not claim evidence"),
+                format!(
+                    "heuristic source {source:?} is proposal/search metadata, not claim evidence"
+                ),
             ),
             SourceEvidence::Unclassified => (
                 LegacyDisposition::LegacyUnattributedAssertion,

@@ -109,12 +109,12 @@ impl Store {
 
     pub fn insert_claim_revision(&mut self, claim: &ClaimRevision) -> Result<(), StoreError> {
         self.ensure_research_absent("claim_revisions_v3", claim.id.0, "claim revision")?;
-        let schema = self
-            .relation_schema(claim.relation)?
-            .ok_or(StoreError::MissingResearchRecord {
-                kind: "relation schema",
-                id: claim.relation.0,
-            })?;
+        let schema =
+            self.relation_schema(claim.relation)?
+                .ok_or(StoreError::MissingResearchRecord {
+                    kind: "relation schema",
+                    id: claim.relation.0,
+                })?;
         let scope = self
             .claim_scope(claim.scope)?
             .ok_or(StoreError::MissingResearchRecord {
@@ -147,17 +147,11 @@ impl Store {
         Ok(())
     }
 
-    pub fn claim_revision(
-        &self,
-        id: ClaimRevisionId,
-    ) -> Result<Option<ClaimRevision>, StoreError> {
+    pub fn claim_revision(&self, id: ClaimRevisionId) -> Result<Option<ClaimRevision>, StoreError> {
         self.read_json_by_id("claim_revisions_v3", "claim_json", id.0)
     }
 
-    pub fn insert_evidence_record(
-        &mut self,
-        evidence: &EvidenceRecord,
-    ) -> Result<(), StoreError> {
+    pub fn insert_evidence_record(&mut self, evidence: &EvidenceRecord) -> Result<(), StoreError> {
         evidence.validate()?;
         self.ensure_research_absent("evidence_records_v3", evidence.id.0, "evidence")?;
         self.require_receipt(evidence.receipt.id)?;
@@ -165,12 +159,12 @@ impl Store {
         for target in &evidence.targets {
             let claim = self.require_claim(target.claim)?;
             self.require_scope(target.applicability_scope)?;
-            let schema = self
-                .relation_schema(claim.relation)?
-                .ok_or(StoreError::MissingResearchRecord {
-                    kind: "relation schema",
-                    id: claim.relation.0,
-                })?;
+            let schema =
+                self.relation_schema(claim.relation)?
+                    .ok_or(StoreError::MissingResearchRecord {
+                        kind: "relation schema",
+                        id: claim.relation.0,
+                    })?;
             schema.validate_evidence_class(evidence.class)?;
         }
 
@@ -200,17 +194,11 @@ impl Store {
         Ok(())
     }
 
-    pub fn evidence_record(
-        &self,
-        id: EvidenceId,
-    ) -> Result<Option<EvidenceRecord>, StoreError> {
+    pub fn evidence_record(&self, id: EvidenceId) -> Result<Option<EvidenceRecord>, StoreError> {
         self.read_json_by_id("evidence_records_v3", "evidence_json", id.0)
     }
 
-    pub fn insert_support_circuit(
-        &mut self,
-        circuit: &SupportCircuit,
-    ) -> Result<(), StoreError> {
+    pub fn insert_support_circuit(&mut self, circuit: &SupportCircuit) -> Result<(), StoreError> {
         self.ensure_research_absent("support_circuits_v3", circuit.id.0, "support circuit")?;
         self.require_claim(circuit.claim)?;
         self.validate_evidence_expr(&circuit.expression)?;
@@ -273,12 +261,12 @@ impl Store {
             ));
         }
         for proposed in &proposal.proposed_claims {
-            let schema = self
-                .relation_schema(proposed.draft.relation)?
-                .ok_or(StoreError::MissingResearchRecord {
+            let schema = self.relation_schema(proposed.draft.relation)?.ok_or(
+                StoreError::MissingResearchRecord {
                     kind: "relation schema",
                     id: proposed.draft.relation.0,
-                })?;
+                },
+            )?;
             schema.validate_claim(&proposed.draft)?;
         }
         for falsifier in &proposal.falsifiers {
@@ -325,7 +313,11 @@ impl Store {
 
     pub fn insert_research_plan(&mut self, plan: &ResearchPlan) -> Result<(), StoreError> {
         self.ensure_research_absent("research_plans_v3", plan.id.0, "research plan")?;
-        self.require_research_record("research_proposals_v3", plan.proposal.0, "research proposal")?;
+        self.require_research_record(
+            "research_proposals_v3",
+            plan.proposal.0,
+            "research proposal",
+        )?;
         self.conn.execute(
             "INSERT INTO research_plans_v3(id,proposal_id,content_digest_json,plan_json) VALUES(?1,?2,?3,?4)",
             params![
@@ -338,10 +330,7 @@ impl Store {
         Ok(())
     }
 
-    pub fn research_plan(
-        &self,
-        id: ResearchPlanId,
-    ) -> Result<Option<ResearchPlan>, StoreError> {
+    pub fn research_plan(&self, id: ResearchPlanId) -> Result<Option<ResearchPlan>, StoreError> {
         self.read_json_by_id("research_plans_v3", "plan_json", id.0)
     }
 
@@ -369,10 +358,7 @@ impl Store {
         Ok(())
     }
 
-    pub fn research_run(
-        &self,
-        id: ResearchRunId,
-    ) -> Result<Option<ResearchRun>, StoreError> {
+    pub fn research_run(&self, id: ResearchRunId) -> Result<Option<ResearchRun>, StoreError> {
         self.read_json_by_id("research_runs_v3", "run_json", id.0)
     }
 
@@ -380,11 +366,7 @@ impl Store {
         &mut self,
         assessment: &ClaimAssessment,
     ) -> Result<(), StoreError> {
-        self.ensure_research_absent(
-            "claim_assessments_v3",
-            assessment.id.0,
-            "claim assessment",
-        )?;
+        self.ensure_research_absent("claim_assessments_v3", assessment.id.0, "claim assessment")?;
         self.require_claim(assessment.claim)?;
         self.conn.execute(
             "INSERT INTO claim_assessments_v3(id,claim_id,policy_id,evidence_snapshot_json,assessment_json) VALUES(?1,?2,?3,?4,?5)",
@@ -466,11 +448,10 @@ impl Store {
     }
 
     fn require_receipt(&self, id: ReceiptId) -> Result<ReceiptRef, StoreError> {
-        self.receipt(id)?
-            .ok_or(StoreError::MissingResearchRecord {
-                kind: "receipt",
-                id: id.0,
-            })
+        self.receipt(id)?.ok_or(StoreError::MissingResearchRecord {
+            kind: "receipt",
+            id: id.0,
+        })
     }
 
     fn require_evidence(&self, id: EvidenceId) -> Result<EvidenceRecord, StoreError> {
@@ -538,7 +519,7 @@ mod tests {
         ActorId, ArgumentSpec, ArtifactId, ArtifactRef, ClaimContext, ClaimKeyId, ClaimKind,
         ClaimOrigin, Digest, EqualitySemantics, EvidenceBearing, EvidenceClass, EvidencePayload,
         EvidenceTarget, MetricValue, ProducerIdentity, RelationExecution, RelationSymmetry,
-        ScopeCompleteness, ScopePolicy, SchemaId, SemanticScope, SourceAnchor, TypedValue,
+        SchemaId, ScopeCompleteness, ScopePolicy, SemanticScope, SourceAnchor, TypedValue,
         ValueType, WorldSemantics,
     };
     use std::collections::{BTreeMap, BTreeSet};
@@ -661,8 +642,14 @@ mod tests {
             recorded_at: "2026-08-19T00:00:00Z".into(),
         };
         store.insert_evidence_record(&evidence).unwrap();
-        assert_eq!(store.claim_revision(ClaimRevisionId(1)).unwrap(), Some(claim()));
-        assert_eq!(store.evidence_record(EvidenceId(1)).unwrap(), Some(evidence));
+        assert_eq!(
+            store.claim_revision(ClaimRevisionId(1)).unwrap(),
+            Some(claim())
+        );
+        assert_eq!(
+            store.evidence_record(EvidenceId(1)).unwrap(),
+            Some(evidence)
+        );
         assert_eq!(store.research_schema_version().unwrap(), 2);
     }
 
@@ -687,10 +674,7 @@ mod tests {
                     digest: Some(digest("result")),
                     locator: None,
                 },
-                metrics: BTreeMap::from([(
-                    "score".into(),
-                    MetricValue::new(1, 1, None).unwrap(),
-                )]),
+                metrics: BTreeMap::from([("score".into(), MetricValue::new(1, 1, None).unwrap())]),
             },
             limitations: vec![],
             independence_group: None,

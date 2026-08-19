@@ -130,6 +130,7 @@ version = "0.1.0"
 dependencies = [
  "atlas-schema",
  "rusqlite",
+ "serde",
  "serde_json",
  "thiserror",
 ]
