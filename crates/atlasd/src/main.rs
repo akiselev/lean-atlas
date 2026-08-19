@@ -4,9 +4,7 @@ use atlas_daemon_protocol::{
     PROTOCOL_VERSION, ProjectMutationRequest, ProjectRequest, ProjectSnapshot, Request, Response,
     ResponsePayload, ServiceError,
 };
-use atlas_engine::runtime::{
-    LeanClient, LeanCommand, LeanError, LeanTransportError, Store,
-};
+use atlas_engine::runtime::{LeanClient, LeanCommand, LeanError, LeanTransportError, Store};
 use daemonkit::{AuthenticatedStream, Bootstrap, Incoming, ServiceContext, Shutdown};
 use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
@@ -168,7 +166,8 @@ impl Project {
         daemon_generation: &str,
     ) -> ServiceError {
         if lean_error_requires_restart(&error) {
-            self.recover_from_lean_failure(error, daemon_generation).await
+            self.recover_from_lean_failure(error, daemon_generation)
+                .await
         } else {
             // A JSON-RPC rejection, stale RpcRef, or other semantic failure is
             // evidence about this request, not proof that the process died.
