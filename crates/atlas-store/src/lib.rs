@@ -1,7 +1,10 @@
+pub mod legacy;
 mod migration;
+mod research;
 
 use atlas_schema::{
-    FactId, FactRow, FactValidationError, FactWarrant, Provenance, RelationTypeId, Value,
+    FactId, FactRow, FactValidationError, FactWarrant, Provenance, RelationTypeId,
+    SchemaValidationError, Value,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
@@ -15,12 +18,20 @@ pub enum StoreError {
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     InvalidFact(#[from] FactValidationError),
+    #[error(transparent)]
+    InvalidResearchSchema(#[from] SchemaValidationError),
     #[error("unknown warrant {0}")]
     InvalidWarrant(String),
     #[error("fact {0:?} already exists; facts are immutable")]
     DuplicateFact(FactId),
     #[error("derived fact {fact:?} references missing support {support:?}")]
     MissingSupport { fact: FactId, support: FactId },
+    #[error("{kind} id {id} already exists; research-v3 records are immutable")]
+    DuplicateResearchRecord { kind: &'static str, id: u64 },
+    #[error("missing {kind} id {id}")]
+    MissingResearchRecord { kind: &'static str, id: u64 },
+    #[error("invalid research graph: {0}")]
+    InvalidResearchGraph(String),
 }
 
 pub struct Store {
@@ -43,6 +54,7 @@ impl Store {
     }
     pub fn migrate(&self) -> Result<(), StoreError> {
         self.conn.execute_batch(migration::V1)?;
+        self.conn.execute_batch(migration::V2)?;
         Ok(())
     }
 
