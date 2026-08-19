@@ -4,7 +4,9 @@ use atlas_daemon_protocol::{
     PROTOCOL_VERSION, ProjectMutationRequest, ProjectRequest, ProjectSnapshot, Request, Response,
     ResponsePayload, ServiceError,
 };
-use atlas_engine::runtime::{LeanClient, LeanCommand, LeanError, Store};
+use atlas_engine::runtime::{
+    LeanClient, LeanCommand, LeanError, LeanTransportError, Store,
+};
 use daemonkit::{AuthenticatedStream, Bootstrap, Incoming, ServiceContext, Shutdown};
 use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
@@ -13,12 +15,16 @@ use std::{
     io,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::Mutex,
+    task::JoinSet,
 };
+
+const SESSION_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Error)]
 enum ServerError {
@@ -98,9 +104,10 @@ impl Project {
             root_uri: self.launch.root_uri.clone(),
         })
         .await?;
-        // Rebuild the live overlay deterministically after every process
-        // generation. didOpen notifications recreate unsaved editor state;
-        // each open also establishes a fresh Lean RPC session.
+
+        // Rebuild the complete unsaved overlay after every process generation.
+        // Native RpcRefs remain private to the new Lean process and are never
+        // represented by this replayable document state.
         for (uri, overlay) in &self.overlays {
             client
                 .open_document(uri.clone(), overlay.text.clone(), overlay.version)
@@ -108,11 +115,22 @@ impl Project {
         }
         self.lean = Some(client);
         self.lean_state = LeanState::Ready;
+        self.last_error = None;
         Ok(())
     }
 
+    async fn shutdown_lean(&mut self) {
+        if let Some(client) = self.lean.take() {
+            // Transport::shutdown bounds the LSP sequence and force-reaps a
+            // process that ignores exit. This outer bound protects atlasd; the
+            // transport's kill-on-drop guard makes cancellation process-safe.
+            let _ = tokio::time::timeout(SESSION_SHUTDOWN_TIMEOUT, client.shutdown()).await;
+        }
+        self.lean_state = LeanState::Stopped;
+    }
+
     async fn restart_lean(&mut self) -> Result<(), LeanError> {
-        self.lean.take();
+        self.shutdown_lean().await;
         self.lean_generation = self.lean_generation.saturating_add(1);
         self.start_lean().await
     }
@@ -143,6 +161,34 @@ impl Project {
             }
         }
     }
+
+    async fn service_error_from_lean(
+        &mut self,
+        error: LeanError,
+        daemon_generation: &str,
+    ) -> ServiceError {
+        if lean_error_requires_restart(&error) {
+            self.recover_from_lean_failure(error, daemon_generation).await
+        } else {
+            // A JSON-RPC rejection, stale RpcRef, or other semantic failure is
+            // evidence about this request, not proof that the process died.
+            ServiceError::new(ErrorCode::OracleFailure, error.to_string())
+                .with_project(self.snapshot(daemon_generation))
+        }
+    }
+}
+
+fn lean_error_requires_restart(error: &LeanError) -> bool {
+    match error {
+        LeanError::StaleEnvironment => true,
+        LeanError::Transport(LeanTransportError::Closed)
+        | LeanError::Transport(LeanTransportError::Io(_))
+        | LeanError::Transport(LeanTransportError::Json(_))
+        | LeanError::Transport(LeanTransportError::Frame(_)) => true,
+        LeanError::Transport(LeanTransportError::Rpc { .. })
+        | LeanError::Transport(LeanTransportError::Spawn(_))
+        | LeanError::StaleHandle => false,
+    }
 }
 
 struct ServiceState {
@@ -165,6 +211,15 @@ impl ServiceState {
             daemon_generation: self.daemon_generation.clone(),
             process_id: self.process_id,
             projects: self.projects.len(),
+        }
+    }
+
+    async fn shutdown_all(&mut self) {
+        // Connection tasks are cancelled and joined before this method runs, so
+        // no request can rediscover a project while its Lean child is stopping.
+        let projects = std::mem::take(&mut self.projects);
+        for (_, mut project) in projects {
+            project.shutdown_lean().await;
         }
     }
 
@@ -264,7 +319,7 @@ impl ServiceState {
             if let Some(lean) = project.lean.as_mut() {
                 if let Err(error) = lean.keep_alive().await {
                     return Err(project
-                        .recover_from_lean_failure(error, &daemon_generation)
+                        .service_error_from_lean(error, &daemon_generation)
                         .await);
                 }
             }
@@ -310,7 +365,7 @@ impl ServiceState {
                 )
                 .with_project(project.snapshot(&daemon_generation)));
             }
-            // restart replayed the newly-recorded overlay.
+            // Restart replayed the newly recorded overlay.
             return Ok(ResponsePayload::Project(
                 project.snapshot(&daemon_generation),
             ));
@@ -332,7 +387,7 @@ impl ServiceState {
         };
         if let Err(error) = result {
             return Err(project
-                .recover_from_lean_failure(error, &daemon_generation)
+                .service_error_from_lean(error, &daemon_generation)
                 .await);
         }
         project.lean_state = LeanState::Ready;
@@ -364,13 +419,13 @@ impl ServiceState {
         if let Some(lean) = project.lean.as_mut() {
             if let Err(error) = lean.close_document(request.uri).await {
                 return Err(project
-                    .recover_from_lean_failure(error, &daemon_generation)
+                    .service_error_from_lean(error, &daemon_generation)
                     .await);
             }
             if let Some(next_uri) = next_uri {
                 if let Err(error) = lean.select_document(next_uri).await {
                     return Err(project
-                        .recover_from_lean_failure(error, &daemon_generation)
+                        .service_error_from_lean(error, &daemon_generation)
                         .await);
                 }
             }
@@ -411,14 +466,20 @@ impl ServiceState {
         &mut self,
         request: ProjectMutationRequest,
     ) -> Result<ResponsePayload, ServiceError> {
-        let project = self.projects.get(&request.project_id).ok_or_else(|| {
-            ServiceError::new(
-                ErrorCode::ProjectNotFound,
-                format!("unknown project {}", request.project_id),
-            )
-        })?;
-        project.check_generation(request.expected_lean_generation)?;
-        self.projects.remove(&request.project_id);
+        {
+            let project = self.projects.get(&request.project_id).ok_or_else(|| {
+                ServiceError::new(
+                    ErrorCode::ProjectNotFound,
+                    format!("unknown project {}", request.project_id),
+                )
+            })?;
+            project.check_generation(request.expected_lean_generation)?;
+        }
+        let mut project = self
+            .projects
+            .remove(&request.project_id)
+            .expect("project was checked above");
+        project.shutdown_lean().await;
         Ok(ResponsePayload::Closed {
             project_id: request.project_id,
         })
@@ -500,6 +561,7 @@ async fn serve(
     mut shutdown: Shutdown,
 ) -> Result<(), ServerError> {
     let state = Arc::new(Mutex::new(ServiceState::new(&context)));
+    let mut connections = JoinSet::new();
     loop {
         tokio::select! {
             _ = shutdown.requested() => break,
@@ -508,7 +570,7 @@ async fn serve(
                 match connection {
                     Ok(stream) => {
                         let state = state.clone();
-                        tokio::spawn(async move {
+                        connections.spawn(async move {
                             if let Err(error) = handle_connection(stream, state).await {
                                 eprintln!("atlasd: connection failed: {error}");
                             }
@@ -519,6 +581,13 @@ async fn serve(
             }
         }
     }
+
+    // No application stream may race project teardown. Once all tasks are
+    // cancelled and joined, drain every project and reap every owned Lean child
+    // before daemonkit can report this generation stopped.
+    connections.abort_all();
+    while connections.join_next().await.is_some() {}
+    state.lock().await.shutdown_all().await;
     Ok(())
 }
 
@@ -534,4 +603,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ordinary_rpc_errors_do_not_restart_the_lean_process() {
+        let rpc = LeanError::Transport(LeanTransportError::Rpc {
+            code: -32602,
+            message: "cannot decode params".into(),
+        });
+        assert!(!lean_error_requires_restart(&rpc));
+        assert!(!lean_error_requires_restart(&LeanError::StaleHandle));
+    }
+
+    #[test]
+    fn dead_or_outdated_sessions_do_restart_the_lean_process() {
+        assert!(lean_error_requires_restart(&LeanError::Transport(
+            LeanTransportError::Closed
+        )));
+        assert!(lean_error_requires_restart(&LeanError::StaleEnvironment));
+    }
 }
