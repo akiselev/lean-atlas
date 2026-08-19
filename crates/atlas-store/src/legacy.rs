@@ -1,10 +1,8 @@
 use atlas_schema::{FactId, FactRow, FactWarrant, Provenance, SourceEvidence};
-use serde::{Deserialize, Serialize};
 
 /// Conservative classification emitted before a legacy fact can be mapped into
 /// a v3 claim/evidence graph. No classification is itself evidence.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LegacyDisposition {
     FormalEvidencePendingReceipt,
     StructuralEvidenceCandidate,
@@ -17,7 +15,7 @@ pub enum LegacyDisposition {
     LegacyUnattributedAssertion,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LegacyImportDiagnostic {
     pub fact: FactId,
     pub disposition: LegacyDisposition,
