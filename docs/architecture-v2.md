@@ -4,7 +4,9 @@ Status: implemented through the M6 live semantic-query service, 2026-08-19 PDT.
 
 ## Ownership
 
-Lean is the authority for elaboration, definitional equality, typeclass synthesis, unification/application behavior and proof checking. Lean-Atlas owns the durable semantic graph, structural retrieval, relation/query logic and provenance. Artifact execution, scientific campaign freezing and promotion remain outside Atlas's authority.
+Lean is the authority for elaboration, definitional equality, typeclass synthesis, unification/application behavior and proof checking. Lean-Atlas is narrowly responsible for Lean-native mathematical exploration: a durable semantic index, structural retrieval, relation/query logic, explanations and replayable formal provenance.
+
+Lean-Atlas is not the general scientific-research system. It does not own literature campaigns, broad scientific claims, numerical or empirical evidence, publication readiness, human review, cross-repository orchestration, dataset acquisition, simulation, fitting or campaign promotion. A separate discovery system consumes Atlas query outputs and combines them with Artifactum, Outboard, League, Solverang, Sinbad, Resolvent and Pi Lab under their own authorities.
 
 The portable `lean/` extractor remains unchanged. It is the archival/fallback JSONL path, not the primary interactive semantic boundary.
 
@@ -40,18 +42,18 @@ atlas (compatibility facade / static JSONL tools)
 
 ## Semantic data and v3 store
 
-`atlas-schema::research` owns non-interchangeable identities for relation schemas, claim keys and revisions, scopes, producer receipts, evidence, support circuits, challenges, proposals, falsifiers, plans, runs and assessments. Relation signatures include typed arguments, equality semantics, scope policy, admissible evidence and open/closed-world behavior.
+`atlas-schema::research` currently owns non-interchangeable identities for relation schemas, claim keys and revisions, scopes, producer receipts, evidence, support circuits, challenges, proposals, falsifiers, plans, runs and assessments. Within Lean-Atlas these types are restricted to mathematical/formal semantic records and compatibility with the previously merged v3 work. They are not a mandate for Atlas to become a general scientific claim or experiment ledger. Broader numerical, empirical and campaign records belong in the downstream discovery system and Pi Lab.
 
-The old `FactRow` and scalar-warrant model remains a compatibility/import boundary. It is not the authority for new research semantics and legacy migration never strengthens a fact automatically.
+Relation signatures include typed arguments, equality semantics, scope policy, admissible evidence and open/closed-world behavior. The old `FactRow` and scalar-warrant model remains a compatibility/import boundary. It is not the authority for new semantic work and legacy migration never strengthens a fact automatically.
 
 The v3 SQLite store separates durable semantic/provenance records from provisional workflow state:
 
 - relation schemas, completeness witnesses, scopes, receipts, claim revisions, evidence records/targets, support circuits and challenges are append-only;
 - research proposals, falsifiers, plans, observed runs and claim assessments remain revisable and disposable while Atlas itself is being validated.
 
-Persistence alone does not validate an experiment. A run can be stored, corrected or discarded without becoming evidence or a promoted scientific claim.
+Persistence alone does not validate a result. A provisional record can be corrected or discarded without becoming formal evidence or a promoted claim. Future cleanup may move non-Lean campaign-oriented records out of Atlas once the downstream discovery-system contract is concrete.
 
-Large scientific artifacts are deliberately not stored in SQLite. Artifactum remains the intended authority for content-addressed bytes, transformations and replayable lineage.
+Large artifacts are deliberately not stored in SQLite. Artifactum remains the authority for content-addressed bytes, transformations and replayable lineage outside Lean-Atlas.
 
 ## Store and logic
 
@@ -128,9 +130,9 @@ Atlas enumerates a bounded cardinality-ordered subset search over explicit, impl
 
 Atlas constructs the default function composition or accepts an explicit proof candidate, elaborates it against the requested proposition and performs a separate `checkProof` call. Only that successful final check produces `status = proved`. Failed composition remains a candidate with its obstruction and does not write a claim, evidence record or assessment.
 
-## Remaining semantic hardening
+## Remaining Lean-Atlas hardening
 
-The service is usable, but these corrections still precede broad scientific claims:
+The service is usable, but these items remain before Mathlib-scale semantic exploration is trustworthy:
 
 - document- and local-context-scoped handle leases with precise `didChange` invalidation;
 - formal environment and document snapshot identities carried through every query receipt;
@@ -138,7 +140,21 @@ The service is usable, but these corrections still precede broad scientific clai
 - a dedicated unification operation whose semantics are tested distinctly from `isDefEq`;
 - fuller structured Lean failures with populated goal and missing-instance detail;
 - persistent index population and automatic candidate generation for live queries;
-- benchmarked `why-not` coverage and Mathlib-scale query performance;
-- Artifactum lineage, normalized scientific datasets, units, plugin execution and Pi Lab campaign export.
+- benchmarked `why-not` coverage, ranking quality and Mathlib-scale query performance;
+- stable export packets so a separate discovery system can consume matches, obstructions, compositions and formal receipts without sharing Atlas internals.
 
-The next vertical slice is the Artifactum-backed EXFOR 1/v case. It should connect immutable input data and normalization lineage to Atlas claims/scopes, execute the numerical/scaling assay through a plugin, retain Lean for formal checks, and export a provisional result for Pi Lab adjudication without automatic promotion.
+## Downstream discovery-system boundary
+
+The novel-physics engine is a separate consumer. It owns scientific problem definitions, datasets, literature, numerical/empirical evidence, simulations, model comparison, campaign control and human adjudication. It may call Lean-Atlas for mathematical retrieval, failed-composition explanations, typeclass paths, context minimization and formal proof receipts, but it cannot treat an Atlas match as an empirical result or a publication-ready claim.
+
+That downstream system should integrate:
+
+- Artifactum for immutable data and execution lineage;
+- Outboard for isolated/versioned engines;
+- League for units and dimensions;
+- Solverang for fitting and nonlinear solving;
+- Sinbad for simulation;
+- Resolvent for symbolic certification;
+- Pi Lab for frozen campaigns, blindness, evidence promotion and final research status.
+
+The first scientific vertical slice remains EXFOR low-energy neutron capture and the 1/v regime, but it should be implemented in that downstream system, with Lean-Atlas used only where formal mathematical analysis is genuinely relevant.
