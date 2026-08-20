@@ -76,11 +76,7 @@ pub async fn execute(
             ))
         }
         wire::SemanticQuery::MinimalContext(request) => {
-            let hypotheses: Vec<_> = request
-                .hypotheses
-                .into_iter()
-                .map(engine_binding)
-                .collect();
+            let hypotheses: Vec<_> = request.hypotheses.into_iter().map(engine_binding).collect();
             let result = engine
                 .minimal_context(
                     &request.goal,
@@ -184,9 +180,7 @@ fn failure(failure: engine::QueryFailure) -> wire::QueryFailure {
             engine::QueryStage::CandidateApplication => wire::QueryStage::CandidateApplication,
             engine::QueryStage::TypeElaboration => wire::QueryStage::TypeElaboration,
             engine::QueryStage::InstanceSynthesis => wire::QueryStage::InstanceSynthesis,
-            engine::QueryStage::ContextGoalElaboration => {
-                wire::QueryStage::ContextGoalElaboration
-            }
+            engine::QueryStage::ContextGoalElaboration => wire::QueryStage::ContextGoalElaboration,
             engine::QueryStage::ContextProofElaboration => {
                 wire::QueryStage::ContextProofElaboration
             }
@@ -197,9 +191,7 @@ fn failure(failure: engine::QueryFailure) -> wire::QueryFailure {
             engine::QueryStage::CompositionProofElaboration => {
                 wire::QueryStage::CompositionProofElaboration
             }
-            engine::QueryStage::CompositionProofCheck => {
-                wire::QueryStage::CompositionProofCheck
-            }
+            engine::QueryStage::CompositionProofCheck => wire::QueryStage::CompositionProofCheck,
         },
         class: match failure.class {
             engine::ObstructionClass::UnknownDeclaration => {

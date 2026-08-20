@@ -1,9 +1,9 @@
 use crate::LeanOracle;
 use atlas_lean_client::{ClientError, LeanClient};
+pub use atlas_lean_protocol::Position;
 use atlas_lean_protocol::{
     ApplyResponse, LeanFailure, LeanFailureKind, OracleResult, SynthInstanceResponse,
 };
-pub use atlas_lean_protocol::Position;
 use std::collections::BTreeSet;
 
 const DEFAULT_QUERY_LIMIT: usize = 64;
@@ -189,7 +189,10 @@ impl<'a> QueryEngine<'a> {
         let candidate_limit = bounded_limit(max_candidates);
         let match_limit = bounded_limit(max_matches);
         let mut seen = BTreeSet::new();
-        for declaration in candidates.iter().filter(|name| seen.insert((*name).clone())) {
+        for declaration in candidates
+            .iter()
+            .filter(|name| seen.insert((*name).clone()))
+        {
             if result.considered >= candidate_limit || result.matches.len() >= match_limit {
                 result.truncated = true;
                 break;
@@ -308,9 +311,7 @@ impl<'a> QueryEngine<'a> {
             }
         };
         match oracle_value(
-            self.oracle
-                .synth_instance(type_expr.expr, position)
-                .await?,
+            self.oracle.synth_instance(type_expr.expr, position).await?,
             QueryStage::InstanceSynthesis,
         ) {
             Ok(SynthInstanceResponse {
@@ -491,10 +492,7 @@ fn bounded_limit(value: usize) -> usize {
     value.max(1).min(HARD_QUERY_LIMIT)
 }
 
-fn oracle_value<T>(
-    result: OracleResult<T>,
-    stage: QueryStage,
-) -> Result<T, QueryFailure> {
+fn oracle_value<T>(result: OracleResult<T>, stage: QueryStage) -> Result<T, QueryFailure> {
     match (result.value, result.failure) {
         (Some(value), _) => Ok(value),
         (_, Some(failure)) => Err(QueryFailure {
@@ -705,10 +703,7 @@ mod tests {
             },
         ];
         let (goal, proof) = context_terms(&bindings, "True", "True.intro");
-        assert_eq!(
-            goal,
-            "(∀ {α : Type} [inst : Inhabited α] (x : α), True)"
-        );
+        assert_eq!(goal, "(∀ {α : Type} [inst : Inhabited α] (x : α), True)");
         assert_eq!(
             proof,
             "(fun {α : Type} [inst : Inhabited α] (x : α) => True.intro)"

@@ -249,7 +249,9 @@ async fn run(args: &[String]) -> Result<(), String> {
             let goal = arg(args, 2, "goal")?.to_string();
             let candidates = args.get(3..).unwrap_or_default().to_vec();
             if candidates.is_empty() {
-                return Err(format!("goal-match requires at least one candidate\n\n{USAGE}"));
+                return Err(format!(
+                    "goal-match requires at least one candidate\n\n{USAGE}"
+                ));
             }
             send_query(
                 &client,
