@@ -33,15 +33,17 @@ live daemon commands:
 
 `query.json` is a tagged SemanticQuery. `spec.json` is a MinimalContextQuery with
 `goal`, `proof`, optional typed `hypotheses`, `position`, and `max_evaluations`.
-Named query commands use Lean position 0:0; use `query` for another position or
-an explicit generation guard.
+Named query commands use ATLAS_QUERY_LINE and ATLAS_QUERY_CHARACTER, defaulting
+to Lean position 0:0. Use `query` when the position must be carried in the request.
 
-Lean launch defaults for open-project:
-  ATLAS_LEAN_BIN       required (for example /path/to/lean)
-  ATLAS_LEAN_PLUGIN    optional; adds --plugin=<path>
-  ATLAS_LEAN_ROOT_URI  optional; defaults to file://<canonical-root>
-  ATLAS_STORE_PATH     optional persistent SQLite path
-  ATLASD_BIN           optional atlasd executable override
+Lean launch and query defaults:
+  ATLAS_LEAN_BIN          required (for example /path/to/lean)
+  ATLAS_LEAN_PLUGIN       optional; adds --plugin=<path>
+  ATLAS_LEAN_ROOT_URI     optional; defaults to file://<canonical-root>
+  ATLAS_STORE_PATH        optional persistent SQLite path
+  ATLASD_BIN              optional atlasd executable override
+  ATLAS_QUERY_LINE        optional zero-based line for named queries
+  ATLAS_QUERY_CHARACTER   optional zero-based character for named queries
 
 The legacy `atlas <query> <slice.jsonl> ...` binary remains the explicit static-export path.
 "#;
@@ -60,6 +62,23 @@ fn generation(value: Option<&String>) -> Result<Option<u64>, String> {
                 .map_err(|_| format!("invalid Lean generation `{value}`"))
         })
         .transpose()
+}
+
+fn query_position() -> Result<QueryPosition, String> {
+    fn component(name: &str) -> Result<u32, String> {
+        match env::var(name) {
+            Ok(value) => value
+                .parse::<u32>()
+                .map_err(|_| format!("{name} must be a non-negative 32-bit integer")),
+            Err(env::VarError::NotPresent) => Ok(0),
+            Err(error) => Err(format!("cannot read {name}: {error}")),
+        }
+    }
+
+    Ok(QueryPosition {
+        line: component("ATLAS_QUERY_LINE")?,
+        character: component("ATLAS_QUERY_CHARACTER")?,
+    })
 }
 
 fn default_launch(root: &str) -> Result<LeanLaunch, String> {
@@ -241,7 +260,7 @@ async fn run(args: &[String]) -> Result<(), String> {
                     max_candidates: candidates.len(),
                     max_matches: candidates.len(),
                     candidates,
-                    position: QueryPosition::default(),
+                    position: query_position()?,
                 }),
             )
             .await
@@ -254,7 +273,7 @@ async fn run(args: &[String]) -> Result<(), String> {
                 SemanticQuery::WhyNot(WhyNotQuery {
                     candidate: arg(args, 2, "candidate")?.into(),
                     goal: arg(args, 3, "goal")?.into(),
-                    position: QueryPosition::default(),
+                    position: query_position()?,
                 }),
             )
             .await
@@ -266,7 +285,7 @@ async fn run(args: &[String]) -> Result<(), String> {
                 None,
                 SemanticQuery::InstancePath(InstancePathQuery {
                     type_text: arg(args, 2, "type")?.into(),
-                    position: QueryPosition::default(),
+                    position: query_position()?,
                 }),
             )
             .await
@@ -293,7 +312,7 @@ async fn run(args: &[String]) -> Result<(), String> {
                     right: arg(args, 3, "right")?.into(),
                     goal: arg(args, 4, "goal")?.into(),
                     proof: args.get(5).cloned(),
-                    position: QueryPosition::default(),
+                    position: query_position()?,
                 }),
             )
             .await
