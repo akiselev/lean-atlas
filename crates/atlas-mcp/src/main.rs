@@ -1,10 +1,12 @@
 use atlas_client::{
     AtlasClient, ClientError,
     protocol::{
-        CloseDocumentRequest, Command, DocumentRequest, LeanLaunch, OpenProjectRequest,
-        ProjectMutationRequest, ProjectRequest,
+        CloseDocumentRequest, Command, ComposeQuery, DocumentRequest, GoalMatchQuery,
+        InstancePathQuery, LeanLaunch, MinimalContextQuery, OpenProjectRequest,
+        ProjectMutationRequest, ProjectRequest, SemanticQuery, SemanticQueryRequest, WhyNotQuery,
     },
 };
+use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::env;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -47,6 +49,28 @@ fn optional_generation(args: &Value) -> Result<Option<u64>, String> {
             .map(Some)
             .ok_or_else(|| "lean_generation must be an unsigned integer".to_string()),
     }
+}
+
+fn decode_query<T: DeserializeOwned>(args: &Value) -> Result<T, String> {
+    serde_json::from_value(args.clone()).map_err(|error| error.to_string())
+}
+
+async fn semantic_query(
+    client: &AtlasClient,
+    args: &Value,
+    query: SemanticQuery,
+) -> Result<atlas_client::protocol::ResponsePayload, String> {
+    client
+        .command(
+            1,
+            Command::Query(SemanticQueryRequest {
+                project_id: required(args, "project_id")?.into(),
+                expected_lean_generation: optional_generation(args)?,
+                query,
+            }),
+        )
+        .await
+        .map_err(client_error)
 }
 
 async fn tool(client: &AtlasClient, name: &str, args: Value) -> Result<Value, String> {
@@ -107,6 +131,26 @@ async fn tool(client: &AtlasClient, name: &str, args: Value) -> Result<Value, St
             )
             .await
             .map_err(client_error)?,
+        "atlas.goal_match" => {
+            let query: GoalMatchQuery = decode_query(&args)?;
+            semantic_query(&client, &args, SemanticQuery::GoalMatch(query)).await?
+        }
+        "atlas.why_not" => {
+            let query: WhyNotQuery = decode_query(&args)?;
+            semantic_query(&client, &args, SemanticQuery::WhyNot(query)).await?
+        }
+        "atlas.instance_path" => {
+            let query: InstancePathQuery = decode_query(&args)?;
+            semantic_query(&client, &args, SemanticQuery::InstancePath(query)).await?
+        }
+        "atlas.minimal_context" => {
+            let query: MinimalContextQuery = decode_query(&args)?;
+            semantic_query(&client, &args, SemanticQuery::MinimalContext(query)).await?
+        }
+        "atlas.compose" => {
+            let query: ComposeQuery = decode_query(&args)?;
+            semantic_query(&client, &args, SemanticQuery::Compose(query)).await?
+        }
         "atlas.restart_lean" | "atlas.close_project" => {
             let request = ProjectMutationRequest {
                 project_id: required(&args, "project_id")?.into(),
@@ -124,7 +168,18 @@ async fn tool(client: &AtlasClient, name: &str, args: Value) -> Result<Value, St
     serde_json::to_value(payload).map_err(|error| error.to_string())
 }
 
+fn query_position_schema() -> Value {
+    json!({
+        "type":"object",
+        "properties":{
+            "line":{"type":"integer","minimum":0},
+            "character":{"type":"integer","minimum":0}
+        }
+    })
+}
+
 fn tools() -> Value {
+    let position = query_position_schema();
     json!([
         {"name":"atlas.ping","description":"Check the shared atlasd generation","inputSchema":{"type":"object","properties":{}}},
         {"name":"atlas.open_project","description":"Open or attach to a persistent Lean project session","inputSchema":{"type":"object","properties":{"root":{"type":"string"},"store_path":{"type":"string"}},"required":["root"]}},
@@ -132,6 +187,11 @@ fn tools() -> Value {
         {"name":"atlas.open_document","description":"Publish an unsaved Lean document into the live overlay","inputSchema":{"type":"object","properties":{"project_id":{"type":"string"},"uri":{"type":"string"},"text":{"type":"string"},"version":{"type":"integer"},"lean_generation":{"type":"integer"}},"required":["project_id","uri","text"]}},
         {"name":"atlas.change_document","description":"Replace an existing live overlay document","inputSchema":{"type":"object","properties":{"project_id":{"type":"string"},"uri":{"type":"string"},"text":{"type":"string"},"version":{"type":"integer"},"lean_generation":{"type":"integer"}},"required":["project_id","uri","text"]}},
         {"name":"atlas.close_document","description":"Remove a document from the live overlay","inputSchema":{"type":"object","properties":{"project_id":{"type":"string"},"uri":{"type":"string"},"lean_generation":{"type":"integer"}},"required":["project_id","uri"]}},
+        {"name":"atlas.goal_match","description":"Lean-confirm which named declarations apply to a goal; rejected candidates retain structured obstructions","inputSchema":{"type":"object","properties":{"project_id":{"type":"string"},"lean_generation":{"type":"integer"},"goal":{"type":"string"},"candidates":{"type":"array","items":{"type":"string"},"minItems":1},"position":position,"max_candidates":{"type":"integer","minimum":1},"max_matches":{"type":"integer","minimum":1}},"required":["project_id","goal","candidates"]}},
+        {"name":"atlas.why_not","description":"Explain the first structured Lean obstruction preventing a candidate from applying to a goal","inputSchema":{"type":"object","properties":{"project_id":{"type":"string"},"lean_generation":{"type":"integer"},"candidate":{"type":"string"},"goal":{"type":"string"},"position":position},"required":["project_id","candidate","goal"]}},
+        {"name":"atlas.instance_path","description":"Run actual Lean typeclass synthesis and return the constructed instance term and dependencies","inputSchema":{"type":"object","properties":{"project_id":{"type":"string"},"lean_generation":{"type":"integer"},"type_text":{"type":"string"},"position":position},"required":["project_id","type_text"]}},
+        {"name":"atlas.minimal_context","description":"Search a bounded Pareto frontier of explicit, implicit and instance binders while replaying and checking each surviving proof in Lean","inputSchema":{"type":"object","properties":{"project_id":{"type":"string"},"lean_generation":{"type":"integer"},"goal":{"type":"string"},"proof":{"type":"string"},"hypotheses":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"type_text":{"type":"string"},"kind":{"enum":["explicit","implicit","instance"]}},"required":["name","type_text"]}},"position":position,"max_evaluations":{"type":"integer","minimum":1}},"required":["project_id","goal","proof"]}},
+        {"name":"atlas.compose","description":"Attempt a logical composition and mark it proved only after an independent Lean proof check","inputSchema":{"type":"object","properties":{"project_id":{"type":"string"},"lean_generation":{"type":"integer"},"left":{"type":"string"},"right":{"type":"string"},"goal":{"type":"string"},"proof":{"type":"string"},"position":position},"required":["project_id","left","right","goal"]}},
         {"name":"atlas.restart_lean","description":"Restart the project Lean child and replay all live overlays","inputSchema":{"type":"object","properties":{"project_id":{"type":"string"},"lean_generation":{"type":"integer"}},"required":["project_id"]}},
         {"name":"atlas.close_project","description":"Close a daemon-owned project session","inputSchema":{"type":"object","properties":{"project_id":{"type":"string"},"lean_generation":{"type":"integer"}},"required":["project_id"]}}
     ])
