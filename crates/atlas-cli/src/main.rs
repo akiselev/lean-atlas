@@ -1,8 +1,10 @@
 use atlas_client::{
     AtlasClient, ClientError,
     protocol::{
-        CloseDocumentRequest, Command, DocumentRequest, LeanLaunch, OpenProjectRequest,
-        ProjectMutationRequest, ProjectRequest, ResponsePayload,
+        CloseDocumentRequest, Command, ComposeQuery, DocumentRequest, GoalMatchQuery,
+        InstancePathQuery, LeanLaunch, MinimalContextQuery, OpenProjectRequest,
+        ProjectMutationRequest, ProjectRequest, QueryPosition, ResponsePayload, SemanticQuery,
+        SemanticQueryRequest, WhyNotQuery,
     },
 };
 use std::{env, path::Path};
@@ -16,11 +18,22 @@ live daemon commands:
   open-document <project-id> <uri> <file> <version> [lean-generation]
   change-document <project-id> <uri> <file> <version> [lean-generation]
   close-document <project-id> <uri> [lean-generation]
+  query <project-id> <query.json> [lean-generation]
+  goal-match <project-id> <goal> <candidate>...
+  why-not <project-id> <candidate> <goal>
+  instance-path <project-id> <type>
+  minimal-context <project-id> <spec.json> [lean-generation]
+  compose <project-id> <left> <right> <goal> [proof]
   restart-lean <project-id> [lean-generation]
   close-project <project-id> [lean-generation]
   daemon-restart
   daemon-stop
   daemon-repair
+
+`query.json` is a tagged SemanticQuery. `spec.json` is a MinimalContextQuery with
+`goal`, `proof`, optional typed `hypotheses`, `position`, and `max_evaluations`.
+Named query commands use Lean position 0:0; use `query` for another position or
+an explicit generation guard.
 
 Lean launch defaults for open-project:
   ATLAS_LEAN_BIN       required (for example /path/to/lean)
@@ -85,6 +98,34 @@ fn remote_error(error: ClientError) -> String {
         }
         other => other.to_string(),
     }
+}
+
+async fn send_query(
+    client: &AtlasClient,
+    project_id: String,
+    expected_lean_generation: Option<u64>,
+    query: SemanticQuery,
+) -> Result<(), String> {
+    print_payload(
+        client
+            .command(
+                1,
+                Command::Query(SemanticQueryRequest {
+                    project_id,
+                    expected_lean_generation,
+                    query,
+                }),
+            )
+            .await
+            .map_err(remote_error)?,
+    )
+}
+
+async fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
+    let bytes = tokio::fs::read(Path::new(path))
+        .await
+        .map_err(|error| format!("{path}: {error}"))?;
+    serde_json::from_slice(&bytes).map_err(|error| format!("{path}: {error}"))
 }
 
 #[tokio::main]
@@ -176,6 +217,82 @@ async fn run(args: &[String]) -> Result<(), String> {
                 .await
                 .map_err(remote_error)?,
         ),
+        "query" => {
+            let project_id = arg(args, 1, "project-id")?.to_string();
+            let query: SemanticQuery = read_json(arg(args, 2, "query.json")?).await?;
+            send_query(&client, project_id, generation(args.get(3))?, query).await
+        }
+        "goal-match" => {
+            let project_id = arg(args, 1, "project-id")?.to_string();
+            let goal = arg(args, 2, "goal")?.to_string();
+            let candidates = args.get(3..).unwrap_or_default().to_vec();
+            if candidates.is_empty() {
+                return Err(format!("goal-match requires at least one candidate\n\n{USAGE}"));
+            }
+            send_query(
+                &client,
+                project_id,
+                None,
+                SemanticQuery::GoalMatch(GoalMatchQuery {
+                    goal,
+                    max_candidates: candidates.len(),
+                    max_matches: candidates.len(),
+                    candidates,
+                    position: QueryPosition::default(),
+                }),
+            )
+            .await
+        }
+        "why-not" => {
+            send_query(
+                &client,
+                arg(args, 1, "project-id")?.into(),
+                None,
+                SemanticQuery::WhyNot(WhyNotQuery {
+                    candidate: arg(args, 2, "candidate")?.into(),
+                    goal: arg(args, 3, "goal")?.into(),
+                    position: QueryPosition::default(),
+                }),
+            )
+            .await
+        }
+        "instance-path" => {
+            send_query(
+                &client,
+                arg(args, 1, "project-id")?.into(),
+                None,
+                SemanticQuery::InstancePath(InstancePathQuery {
+                    type_text: arg(args, 2, "type")?.into(),
+                    position: QueryPosition::default(),
+                }),
+            )
+            .await
+        }
+        "minimal-context" => {
+            let query: MinimalContextQuery = read_json(arg(args, 2, "spec.json")?).await?;
+            send_query(
+                &client,
+                arg(args, 1, "project-id")?.into(),
+                generation(args.get(3))?,
+                SemanticQuery::MinimalContext(query),
+            )
+            .await
+        }
+        "compose" => {
+            send_query(
+                &client,
+                arg(args, 1, "project-id")?.into(),
+                None,
+                SemanticQuery::Compose(ComposeQuery {
+                    left: arg(args, 2, "left")?.into(),
+                    right: arg(args, 3, "right")?.into(),
+                    goal: arg(args, 4, "goal")?.into(),
+                    proof: args.get(5).cloned(),
+                    position: QueryPosition::default(),
+                }),
+            )
+            .await
+        }
         "restart-lean" | "close-project" => {
             let request = ProjectMutationRequest {
                 project_id: arg(args, 1, "project-id")?.into(),
