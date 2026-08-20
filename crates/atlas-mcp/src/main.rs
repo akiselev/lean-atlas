@@ -6,7 +6,6 @@ use atlas_client::{
         ProjectMutationRequest, ProjectRequest, SemanticQuery, SemanticQueryRequest, WhyNotQuery,
     },
 };
-use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::env;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -49,10 +48,6 @@ fn optional_generation(args: &Value) -> Result<Option<u64>, String> {
             .map(Some)
             .ok_or_else(|| "lean_generation must be an unsigned integer".to_string()),
     }
-}
-
-fn decode_query<T: DeserializeOwned>(args: &Value) -> Result<T, String> {
-    serde_json::from_value(args.clone()).map_err(|error| error.to_string())
 }
 
 async fn semantic_query(
@@ -132,24 +127,29 @@ async fn tool(client: &AtlasClient, name: &str, args: Value) -> Result<Value, St
             .await
             .map_err(client_error)?,
         "atlas.goal_match" => {
-            let query: GoalMatchQuery = decode_query(&args)?;
-            semantic_query(&client, &args, SemanticQuery::GoalMatch(query)).await?
+            let query: GoalMatchQuery = serde_json::from_value(args.clone())
+                .map_err(|error| format!("invalid goal-match arguments: {error}"))?;
+            semantic_query(client, &args, SemanticQuery::GoalMatch(query)).await?
         }
         "atlas.why_not" => {
-            let query: WhyNotQuery = decode_query(&args)?;
-            semantic_query(&client, &args, SemanticQuery::WhyNot(query)).await?
+            let query: WhyNotQuery = serde_json::from_value(args.clone())
+                .map_err(|error| format!("invalid why-not arguments: {error}"))?;
+            semantic_query(client, &args, SemanticQuery::WhyNot(query)).await?
         }
         "atlas.instance_path" => {
-            let query: InstancePathQuery = decode_query(&args)?;
-            semantic_query(&client, &args, SemanticQuery::InstancePath(query)).await?
+            let query: InstancePathQuery = serde_json::from_value(args.clone())
+                .map_err(|error| format!("invalid instance-path arguments: {error}"))?;
+            semantic_query(client, &args, SemanticQuery::InstancePath(query)).await?
         }
         "atlas.minimal_context" => {
-            let query: MinimalContextQuery = decode_query(&args)?;
-            semantic_query(&client, &args, SemanticQuery::MinimalContext(query)).await?
+            let query: MinimalContextQuery = serde_json::from_value(args.clone())
+                .map_err(|error| format!("invalid minimal-context arguments: {error}"))?;
+            semantic_query(client, &args, SemanticQuery::MinimalContext(query)).await?
         }
         "atlas.compose" => {
-            let query: ComposeQuery = decode_query(&args)?;
-            semantic_query(&client, &args, SemanticQuery::Compose(query)).await?
+            let query: ComposeQuery = serde_json::from_value(args.clone())
+                .map_err(|error| format!("invalid compose arguments: {error}"))?;
+            semantic_query(client, &args, SemanticQuery::Compose(query)).await?
         }
         "atlas.restart_lean" | "atlas.close_project" => {
             let request = ProjectMutationRequest {
