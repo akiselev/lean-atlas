@@ -84,6 +84,8 @@ jobs:
           export ATLAS_LEAN_BIN="$(command -v lean)"
           export ATLAS_LEAN_PLUGIN="${{ steps.plugin.outputs.plugin }}"
           export ATLAS_LEAN_ROOT_URI="$(python3 -c 'import pathlib; print(pathlib.Path("lean-server").resolve().as_uri())')"
+          export ATLAS_QUERY_LINE=8
+          export ATLAS_QUERY_CHARACTER=0
           export ATLAS_M6_CLI="$(realpath target/debug/atlas-cli)"
           export ATLAS_M6_MCP="$(realpath target/debug/atlas-mcp)"
           export ATLAS_M6_ROOT="$(realpath lean-server)"
