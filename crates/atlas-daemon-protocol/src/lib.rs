@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: &str = "atlas-daemon-v1";
+pub const PROTOCOL_VERSION: &str = "atlas-daemon-v2";
 pub const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,6 +29,7 @@ pub enum Command {
     OpenDocument(DocumentRequest),
     ChangeDocument(DocumentRequest),
     CloseDocument(CloseDocumentRequest),
+    Query(SemanticQueryRequest),
     RestartLean(ProjectMutationRequest),
     CloseProject(ProjectMutationRequest),
 }
@@ -79,6 +80,112 @@ pub struct CloseDocumentRequest {
     pub expected_lean_generation: Option<u64>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueryPosition {
+    #[serde(default)]
+    pub line: u32,
+    #[serde(default)]
+    pub character: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SemanticQueryRequest {
+    pub project_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_lean_generation: Option<u64>,
+    pub query: SemanticQuery,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "query", content = "params", rename_all = "snake_case")]
+pub enum SemanticQuery {
+    GoalMatch(GoalMatchQuery),
+    WhyNot(WhyNotQuery),
+    InstancePath(InstancePathQuery),
+    MinimalContext(MinimalContextQuery),
+    Compose(ComposeQuery),
+}
+
+fn default_max_candidates() -> usize {
+    256
+}
+fn default_max_matches() -> usize {
+    64
+}
+fn default_max_evaluations() -> usize {
+    256
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoalMatchQuery {
+    pub goal: String,
+    pub candidates: Vec<String>,
+    #[serde(default)]
+    pub position: QueryPosition,
+    #[serde(default = "default_max_candidates")]
+    pub max_candidates: usize,
+    #[serde(default = "default_max_matches")]
+    pub max_matches: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WhyNotQuery {
+    pub candidate: String,
+    pub goal: String,
+    #[serde(default)]
+    pub position: QueryPosition,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstancePathQuery {
+    pub type_text: String,
+    #[serde(default)]
+    pub position: QueryPosition,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextBindingKind {
+    Explicit,
+    Implicit,
+    Instance,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextBinding {
+    pub name: String,
+    pub type_text: String,
+    #[serde(default = "default_context_binding_kind")]
+    pub kind: ContextBindingKind,
+}
+
+fn default_context_binding_kind() -> ContextBindingKind {
+    ContextBindingKind::Explicit
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MinimalContextQuery {
+    pub goal: String,
+    pub proof: String,
+    #[serde(default)]
+    pub hypotheses: Vec<ContextBinding>,
+    #[serde(default)]
+    pub position: QueryPosition,
+    #[serde(default = "default_max_evaluations")]
+    pub max_evaluations: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ComposeQuery {
+    pub left: String,
+    pub right: String,
+    pub goal: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof: Option<String>,
+    #[serde(default)]
+    pub position: QueryPosition,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Response {
     pub id: u64,
@@ -116,7 +223,165 @@ pub enum Outcome {
 pub enum ResponsePayload {
     Pong(DaemonSnapshot),
     Project(ProjectSnapshot),
+    Query(QueryResponse),
     Closed { project_id: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "query", content = "result", rename_all = "snake_case")]
+pub enum QueryResponse {
+    GoalMatch(GoalMatchResponse),
+    WhyNot(WhyNotResponse),
+    InstancePath(InstancePathResponse),
+    MinimalContext(MinimalContextResponse),
+    Compose(ComposeResponse),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryStage {
+    GoalElaboration,
+    CandidateLookup,
+    CandidateApplication,
+    TypeElaboration,
+    InstanceSynthesis,
+    ContextGoalElaboration,
+    ContextProofElaboration,
+    ContextProofCheck,
+    CompositionGoalElaboration,
+    CompositionProofElaboration,
+    CompositionProofCheck,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObstructionClass {
+    UnknownDeclaration,
+    Elaboration,
+    TypeMismatch,
+    Unification,
+    DefinitionalEquality,
+    InstanceSynthesis,
+    UnsolvedMetavariables,
+    UniverseConstraint,
+    MissingHypothesis,
+    InvalidProof,
+    StaleContext,
+    Internal,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueryMetavariable {
+    pub name: String,
+    pub type_text: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueryFailure {
+    pub stage: QueryStage,
+    pub class: ObstructionClass,
+    pub message: String,
+    #[serde(default)]
+    pub goals: Vec<String>,
+    #[serde(default)]
+    pub missing_instances: Vec<String>,
+    #[serde(default)]
+    pub metavariables: Vec<QueryMetavariable>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CandidateRejection {
+    pub declaration: String,
+    pub failure: QueryFailure,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoalMatchCandidate {
+    pub declaration: String,
+    pub subgoals: Vec<String>,
+    pub closes_goal: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoalMatchResponse {
+    pub goal: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_pretty: Option<String>,
+    pub considered: usize,
+    pub matches: Vec<GoalMatchCandidate>,
+    pub rejections: Vec<CandidateRejection>,
+    pub truncated: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_failure: Option<QueryFailure>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WhyNotResponse {
+    pub candidate: String,
+    pub goal: String,
+    pub applicable: bool,
+    pub closes_goal: bool,
+    pub subgoals: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<QueryFailure>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstancePathResponse {
+    pub type_text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_pretty: Option<String>,
+    pub dependencies: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<QueryFailure>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MinimalContextWitness {
+    pub kept: Vec<ContextBinding>,
+    pub removed: Vec<ContextBinding>,
+    pub goal_pretty: String,
+    pub proof_pretty: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RejectedContext {
+    pub kept: Vec<String>,
+    pub failure: QueryFailure,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MinimalContextResponse {
+    pub goal: String,
+    pub proof: String,
+    pub frontier: Vec<MinimalContextWitness>,
+    pub rejections: Vec<RejectedContext>,
+    pub evaluations: usize,
+    pub truncated: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompositionStatus {
+    Proved,
+    Candidate,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ComposeResponse {
+    pub left: String,
+    pub right: String,
+    pub goal: String,
+    pub proof_term: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof_pretty: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_pretty: Option<String>,
+    pub status: CompositionStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<QueryFailure>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -215,6 +480,29 @@ mod tests {
                     root_uri: "file:///tmp/project".into(),
                 },
                 store_path: None,
+            }),
+        );
+        let encoded = serde_json::to_vec(&request).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Request>(&encoded).unwrap(),
+            request
+        );
+    }
+
+    #[test]
+    fn semantic_query_roundtrips_with_typed_operation() {
+        let request = Request::new(
+            11,
+            Command::Query(SemanticQueryRequest {
+                project_id: "project".into(),
+                expected_lean_generation: Some(3),
+                query: SemanticQuery::Compose(ComposeQuery {
+                    left: "left".into(),
+                    right: "right".into(),
+                    goal: "A → C".into(),
+                    proof: None,
+                    position: QueryPosition::default(),
+                }),
             }),
         );
         let encoded = serde_json::to_vec(&request).unwrap();

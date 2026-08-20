@@ -1,10 +1,12 @@
 # Lean-Atlas v2 architecture
 
-Status: implemented through M5 (`atlasd` daemonized live index), 2026-08-19.
+Status: implemented through the M6 live semantic-query service, 2026-08-19 PDT.
 
 ## Ownership
 
-Lean is the authority for elaboration, definitional equality, typeclass synthesis, unification, application and proof checking. Lean-Atlas owns the durable semantic graph, structural retrieval, relation/query logic and provenance. Bulk artifact execution and campaign promotion remain outside this milestone and outside Atlas's authority.
+Lean is the authority for elaboration, definitional equality, typeclass synthesis, unification/application behavior and proof checking. Lean-Atlas is narrowly responsible for Lean-native mathematical exploration: a durable semantic index, structural retrieval, relation/query logic, explanations and replayable formal provenance.
+
+Lean-Atlas is not the general scientific-research system. It does not own literature campaigns, broad scientific claims, numerical or empirical evidence, publication readiness, human review, cross-repository orchestration, dataset acquisition, simulation, fitting or campaign promotion. A separate discovery system consumes Atlas query outputs and combines them with Artifactum, Outboard, League, Solverang, Sinbad, Resolvent and Pi Lab under their own authorities.
 
 The portable `lean/` extractor remains unchanged. It is the archival/fallback JSONL path, not the primary interactive semantic boundary.
 
@@ -36,21 +38,28 @@ atlas (compatibility facade / static JSONL tools)
   └─ atlas-schema
 ```
 
-`scripts/check-deps.py` enforces the forbidden inward dependency edges in CI, including exact workspace-edge allowlists for the M5 daemon crates. `atlasd` reaches storage and Lean only through `atlas-engine`; it never depends on the client frontend. `atlas-client` is the sole workspace dependency of the live CLI and MCP frontends and re-exports the versioned daemon protocol types they need.
+`scripts/check-deps.py` enforces forbidden inward dependency edges and exact workspace-edge allowlists. `atlasd` reaches storage and Lean only through `atlas-engine`; it never depends on a client frontend. `atlas-client` is the sole workspace dependency of the live CLI and MCP frontends and re-exports the versioned daemon protocol types they need.
 
-## Semantic data
+## Semantic data and v3 store
 
-`atlas-schema` owns non-interchangeable IDs, relation execution classes, warrants, fact values and provenance. Relation execution (`materialized`, `derived`, `oracle`, `candidate`) is independent from scientific/formal warrant (`proved`, `structural`, `asserted`, `heuristic`).
+`atlas-schema::research` currently owns non-interchangeable identities for relation schemas, claim keys and revisions, scopes, producer receipts, evidence, support circuits, challenges, proposals, falsifiers, plans, runs and assessments. Within Lean-Atlas these types are restricted to mathematical/formal semantic records and compatibility with the previously merged v3 work. They are not a mandate for Atlas to become a general scientific claim or experiment ledger. Broader numerical, empirical and campaign records belong in the downstream discovery system and Pi Lab.
 
-The legacy relation enum/parser/registry has been replaced by one declarative relation table. Its stable v1 wire names are retained while `AssertedIff` and `AssertedImplies` are now included in parsing and `ALL`.
+Relation signatures include typed arguments, equality semantics, scope policy, admissible evidence and open/closed-world behavior. The old `FactRow` and scalar-warrant model remains a compatibility/import boundary. It is not the authority for new semantic work and legacy migration never strengthens a fact automatically.
 
-The scalar warrant model remains a compatibility boundary at M5. The next semantic milestone replaces it with immutable claim revisions, explicit scopes, typed evidence and support/challenge circuits. M5 does not silently freeze the old warrant hierarchy as the long-term scientific model.
+The v3 SQLite store separates durable semantic/provenance records from provisional workflow state:
+
+- relation schemas, completeness witnesses, scopes, receipts, claim revisions, evidence records/targets, support circuits and challenges are append-only;
+- research proposals, falsifiers, plans, observed runs and claim assessments remain revisable and disposable while Atlas itself is being validated.
+
+Persistence alone does not validate a result. A provisional record can be corrected or discarded without becoming formal evidence or a promoted claim. Future cleanup may move non-Lean campaign-oriented records out of Atlas once the downstream discovery-system contract is concrete.
+
+Large artifacts are deliberately not stored in SQLite. Artifactum remains the authority for content-addressed bytes, transformations and replayable lineage outside Lean-Atlas.
 
 ## Store and logic
 
-`atlas-store` is a local SQLite semantic database. Large scientific artifacts are deliberately not stored here. The schema includes entities, declarations, relation types, facts/arguments, evidence, origins, oracle receipts, artifact links, fingerprints, module versions, experiments and assays.
-
 `atlas-logic` has no database dependency. `FactSource` is its narrow input seam. The reference evaluator is the executable specification; the optimized evaluator uses delta/semi-naive fixed-point evaluation, bounded deterministic result streams and cancellation. Generated differential tests compare the two.
+
+The v3 store validates relation identity/signatures, scope and receipt existence, admissible evidence classes, support-expression integrity, proposal-local references and plan/run lineage. Multi-row evidence and proposal writes are transactional.
 
 ## Live Lean boundary
 
@@ -62,7 +71,7 @@ Lean server requests and notifications interleaved with client responses are cla
 
 The Lean child has kill-on-drop ownership. Shutdown attempts the normal LSP `shutdown`/`exit` sequence under a deadline, waits for the child under a second deadline, and force-reaps a process that does not exit. Cancelling a bounded shutdown therefore cannot detach a surviving `lean --server` process.
 
-The M4 operation gate is:
+The live oracle operation gate is:
 
 - `lookupDecl`
 - `getType`
@@ -87,7 +96,7 @@ A project session is keyed by a stable digest of its canonical root. It owns:
 - a map of unsaved open-file overlays with editor versions;
 - structured `ready`, `degraded`, `restarting`, or `stopped` Lean state.
 
-Unsaved document text is recorded in the daemon before it is sent to Lean. A Lean-child restart increments the project Lean generation and deterministically replays every open overlay with `didOpen`, yielding fresh RPC sessions. Mutating requests may carry `expected_lean_generation`; stale generations are rejected rather than silently acting on a successor. Native Lean `RpcRef` values are deliberately absent from the daemon protocol, so process-local Lean handles cannot cross a restart or client boundary.
+Unsaved document text is recorded in the daemon before it is sent to Lean. A Lean-child restart increments the project Lean generation and deterministically replays every open overlay with `didOpen`, yielding fresh RPC sessions. Mutating and query requests may carry `expected_lean_generation`; stale generations are rejected rather than silently acting on a successor. Native Lean `RpcRef` values are deliberately absent from the daemon protocol, so process-local Lean handles cannot cross a restart or client boundary.
 
 Not every Lean error is process death. Application-level JSON-RPC rejection, malformed method parameters, unknown Atlas methods and stale individual `RpcRef` values return a structured `oracle_failure` without changing the project generation or replacing the Lean PID. A stale RPC environment or an unusable transport (`closed`, I/O, framing or JSON-stream failure) takes the restart path. Successful recovery is surfaced as `lean_restarted`; failed recovery becomes `lean_unavailable`.
 
@@ -97,18 +106,55 @@ An unexpected `atlasd` process loss is repaired through daemonkit; persistent SQ
 
 `atlas-cli` is the live operator/agent frontend. The canonical `atlas-mcp` binary is the MCP frontend over the same client and daemon. The pre-M5 slice-only MCP server remains available as `atlas-static-mcp`, while the existing `atlas <query> <slice.jsonl>` commands remain unchanged as the explicit offline/export path and do not require `atlasd`.
 
-## Deliberately deferred M4.1 semantic corrections
+## M6 semantic-query boundary
 
-M5 establishes lifecycle and service ownership. It does not claim to solve the deeper durable-semantics boundary. The next stacked milestone must provide:
+`atlas-engine::query` implements the first five typed operations through the existing Lean oracle. The daemon protocol is versioned and contains concrete query request/response types rather than an unrestricted method/JSON tunnel. Both CLI and MCP lower to those same protocol types.
 
-- document- and local-context-scoped handle leases, with `didChange` invalidation;
-- explicit formal environment and document snapshot identities;
-- replayable formal receipts containing goals, used declarations and axiom footprints;
-- real proof-check semantics rather than only inferred-type definitional equality;
-- real unification distinct from `isDefEq`;
-- a meaningful distinction between declaration type lookup and expression type inference;
-- complete structured failures when goals are populated;
-- strict store enforcement for relation schemas, evidence links and non-empty derivations;
-- immutable claims with explicit scopes and typed evidence rather than a universal scalar scientific warrant.
+### `goal-match`
 
-These corrections precede the first five user-facing semantic queries (`goal-match`, `why-not`, `instance-path`, `minimal-context`, `compose`). Artifactum/Outboard integration and scientific dataset/plugin layers follow those semantic gates.
+Atlas receives a bounded candidate set, elaborates the goal, resolves each declaration and asks Lean to apply it. Only successful Lean applications are returned as matches; generated subgoals and structured rejections remain inspectable. Persistent-index candidate generation and ranking are the next retrieval integration, not approximated by accepting structurally similar declarations as final results.
+
+### `why-not`
+
+The same lookup/application path records the first failing stage and maps Lean failures into non-generic obstruction classes such as unknown declaration, type mismatch, unification, missing hypothesis, instance synthesis, metavariable, universe, stale context and invalid proof. The committed live fixture proves the structured path; the planned curated near-miss corpus must still measure the original 90% classification target.
+
+### `instance-path`
+
+Atlas calls actual Lean typeclass synthesis and returns the synthesized term plus constants occurring in that construction. This is not inferred from static dependency edges. A nested synthesis trace remains a later protocol extension.
+
+### `minimal-context`
+
+Atlas enumerates a bounded cardinality-ordered subset search over explicit, implicit and instance binders. Every accepted frontier member is re-elaborated against its reconstructed forall goal and independently checked by Lean. Module/import minimization is deliberately separate because it requires replay against controlled environment snapshots rather than deleting binders in one live document.
+
+### `compose`
+
+Atlas constructs the default function composition or accepts an explicit proof candidate, elaborates it against the requested proposition and performs a separate `checkProof` call. Only that successful final check produces `status = proved`. Failed composition remains a candidate with its obstruction and does not write a claim, evidence record or assessment.
+
+## Remaining Lean-Atlas hardening
+
+The service is usable, but these items remain before Mathlib-scale semantic exploration is trustworthy:
+
+- document- and local-context-scoped handle leases with precise `didChange` invalidation;
+- formal environment and document snapshot identities carried through every query receipt;
+- richer replayable proof receipts containing goals, used declarations and axiom footprints;
+- a dedicated unification operation whose semantics are tested distinctly from `isDefEq`;
+- fuller structured Lean failures with populated goal and missing-instance detail;
+- persistent index population and automatic candidate generation for live queries;
+- benchmarked `why-not` coverage, ranking quality and Mathlib-scale query performance;
+- stable export packets so a separate discovery system can consume matches, obstructions, compositions and formal receipts without sharing Atlas internals.
+
+## Downstream discovery-system boundary
+
+The novel-physics engine is a separate consumer. It owns scientific problem definitions, datasets, literature, numerical/empirical evidence, simulations, model comparison, campaign control and human adjudication. It may call Lean-Atlas for mathematical retrieval, failed-composition explanations, typeclass paths, context minimization and formal proof receipts, but it cannot treat an Atlas match as an empirical result or a publication-ready claim.
+
+That downstream system should integrate:
+
+- Artifactum for immutable data and execution lineage;
+- Outboard for isolated/versioned engines;
+- League for units and dimensions;
+- Solverang for fitting and nonlinear solving;
+- Sinbad for simulation;
+- Resolvent for symbolic certification;
+- Pi Lab for frozen campaigns, blindness, evidence promotion and final research status.
+
+The first scientific vertical slice remains EXFOR low-energy neutron capture and the 1/v regime, but it should be implemented in that downstream system, with Lean-Atlas used only where formal mathematical analysis is genuinely relevant.

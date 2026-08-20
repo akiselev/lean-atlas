@@ -1,10 +1,13 @@
 use atlas_client::{
     AtlasClient, ClientError,
     protocol::{
-        CloseDocumentRequest, Command, DocumentRequest, LeanLaunch, OpenProjectRequest,
-        ProjectMutationRequest, ProjectRequest, ResponsePayload,
+        CloseDocumentRequest, Command, ComposeQuery, DocumentRequest, GoalMatchQuery,
+        InstancePathQuery, LeanLaunch, MinimalContextQuery, OpenProjectRequest,
+        ProjectMutationRequest, ProjectRequest, QueryPosition, ResponsePayload, SemanticQuery,
+        SemanticQueryRequest, WhyNotQuery,
     },
 };
+use serde_json::Value;
 use std::{env, path::Path};
 
 const USAGE: &str = r#"usage: atlas-cli <command> [args]
@@ -16,18 +19,31 @@ live daemon commands:
   open-document <project-id> <uri> <file> <version> [lean-generation]
   change-document <project-id> <uri> <file> <version> [lean-generation]
   close-document <project-id> <uri> [lean-generation]
+  query <project-id> <query.json> [lean-generation]
+  goal-match <project-id> <goal> <candidate>...
+  why-not <project-id> <candidate> <goal>
+  instance-path <project-id> <type>
+  minimal-context <project-id> <spec.json> [lean-generation]
+  compose <project-id> <left> <right> <goal> [proof]
   restart-lean <project-id> [lean-generation]
   close-project <project-id> [lean-generation]
   daemon-restart
   daemon-stop
   daemon-repair
 
-Lean launch defaults for open-project:
-  ATLAS_LEAN_BIN       required (for example /path/to/lean)
-  ATLAS_LEAN_PLUGIN    optional; adds --plugin=<path>
-  ATLAS_LEAN_ROOT_URI  optional; defaults to file://<canonical-root>
-  ATLAS_STORE_PATH     optional persistent SQLite path
-  ATLASD_BIN           optional atlasd executable override
+`query.json` is a tagged SemanticQuery. `spec.json` is a MinimalContextQuery with
+`goal`, `proof`, optional typed `hypotheses`, `position`, and `max_evaluations`.
+Named query commands use ATLAS_QUERY_LINE and ATLAS_QUERY_CHARACTER, defaulting
+to Lean position 0:0. Use `query` when the position must be carried in the request.
+
+Lean launch and query defaults:
+  ATLAS_LEAN_BIN          required (for example /path/to/lean)
+  ATLAS_LEAN_PLUGIN       optional; adds --plugin=<path>
+  ATLAS_LEAN_ROOT_URI     optional; defaults to file://<canonical-root>
+  ATLAS_STORE_PATH        optional persistent SQLite path
+  ATLASD_BIN              optional atlasd executable override
+  ATLAS_QUERY_LINE        optional zero-based line for named queries
+  ATLAS_QUERY_CHARACTER   optional zero-based character for named queries
 
 The legacy `atlas <query> <slice.jsonl> ...` binary remains the explicit static-export path.
 "#;
@@ -46,6 +62,23 @@ fn generation(value: Option<&String>) -> Result<Option<u64>, String> {
                 .map_err(|_| format!("invalid Lean generation `{value}`"))
         })
         .transpose()
+}
+
+fn query_position() -> Result<QueryPosition, String> {
+    fn component(name: &str) -> Result<u32, String> {
+        match env::var(name) {
+            Ok(value) => value
+                .parse::<u32>()
+                .map_err(|_| format!("{name} must be a non-negative 32-bit integer")),
+            Err(env::VarError::NotPresent) => Ok(0),
+            Err(error) => Err(format!("cannot read {name}: {error}")),
+        }
+    }
+
+    Ok(QueryPosition {
+        line: component("ATLAS_QUERY_LINE")?,
+        character: component("ATLAS_QUERY_CHARACTER")?,
+    })
 }
 
 fn default_launch(root: &str) -> Result<LeanLaunch, String> {
@@ -85,6 +118,34 @@ fn remote_error(error: ClientError) -> String {
         }
         other => other.to_string(),
     }
+}
+
+async fn send_query(
+    client: &AtlasClient,
+    project_id: String,
+    expected_lean_generation: Option<u64>,
+    query: SemanticQuery,
+) -> Result<(), String> {
+    print_payload(
+        client
+            .command(
+                1,
+                Command::Query(SemanticQueryRequest {
+                    project_id,
+                    expected_lean_generation,
+                    query,
+                }),
+            )
+            .await
+            .map_err(remote_error)?,
+    )
+}
+
+async fn read_json_value(path: &str) -> Result<Value, String> {
+    let bytes = tokio::fs::read(Path::new(path))
+        .await
+        .map_err(|error| format!("{path}: {error}"))?;
+    serde_json::from_slice(&bytes).map_err(|error| format!("{path}: {error}"))
 }
 
 #[tokio::main]
@@ -176,6 +237,88 @@ async fn run(args: &[String]) -> Result<(), String> {
                 .await
                 .map_err(remote_error)?,
         ),
+        "query" => {
+            let project_id = arg(args, 1, "project-id")?.to_string();
+            let value = read_json_value(arg(args, 2, "query.json")?).await?;
+            let query: SemanticQuery = serde_json::from_value(value)
+                .map_err(|error| format!("invalid SemanticQuery: {error}"))?;
+            send_query(&client, project_id, generation(args.get(3))?, query).await
+        }
+        "goal-match" => {
+            let project_id = arg(args, 1, "project-id")?.to_string();
+            let goal = arg(args, 2, "goal")?.to_string();
+            let candidates = args.get(3..).unwrap_or_default().to_vec();
+            if candidates.is_empty() {
+                return Err(format!(
+                    "goal-match requires at least one candidate\n\n{USAGE}"
+                ));
+            }
+            send_query(
+                &client,
+                project_id,
+                None,
+                SemanticQuery::GoalMatch(GoalMatchQuery {
+                    goal,
+                    max_candidates: candidates.len(),
+                    max_matches: candidates.len(),
+                    candidates,
+                    position: query_position()?,
+                }),
+            )
+            .await
+        }
+        "why-not" => {
+            send_query(
+                &client,
+                arg(args, 1, "project-id")?.into(),
+                None,
+                SemanticQuery::WhyNot(WhyNotQuery {
+                    candidate: arg(args, 2, "candidate")?.into(),
+                    goal: arg(args, 3, "goal")?.into(),
+                    position: query_position()?,
+                }),
+            )
+            .await
+        }
+        "instance-path" => {
+            send_query(
+                &client,
+                arg(args, 1, "project-id")?.into(),
+                None,
+                SemanticQuery::InstancePath(InstancePathQuery {
+                    type_text: arg(args, 2, "type")?.into(),
+                    position: query_position()?,
+                }),
+            )
+            .await
+        }
+        "minimal-context" => {
+            let value = read_json_value(arg(args, 2, "spec.json")?).await?;
+            let query: MinimalContextQuery = serde_json::from_value(value)
+                .map_err(|error| format!("invalid MinimalContextQuery: {error}"))?;
+            send_query(
+                &client,
+                arg(args, 1, "project-id")?.into(),
+                generation(args.get(3))?,
+                SemanticQuery::MinimalContext(query),
+            )
+            .await
+        }
+        "compose" => {
+            send_query(
+                &client,
+                arg(args, 1, "project-id")?.into(),
+                None,
+                SemanticQuery::Compose(ComposeQuery {
+                    left: arg(args, 2, "left")?.into(),
+                    right: arg(args, 3, "right")?.into(),
+                    goal: arg(args, 4, "goal")?.into(),
+                    proof: args.get(5).cloned(),
+                    position: query_position()?,
+                }),
+            )
+            .await
+        }
         "restart-lean" | "close-project" => {
             let request = ProjectMutationRequest {
                 project_id: arg(args, 1, "project-id")?.into(),

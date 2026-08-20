@@ -1,8 +1,10 @@
+mod query;
+
 use atlas_daemon_protocol::{
     CloseDocumentRequest, Command, DaemonSnapshot, DocumentRequest, ErrorCode, LeanLaunch,
     LeanSnapshot, LeanState, MAX_FRAME_BYTES, OpenProjectRequest, OverlaySnapshot,
     PROTOCOL_VERSION, ProjectMutationRequest, ProjectRequest, ProjectSnapshot, Request, Response,
-    ResponsePayload, ServiceError,
+    ResponsePayload, SemanticQueryRequest, ServiceError,
 };
 use atlas_engine::runtime::{LeanClient, LeanCommand, LeanError, LeanTransportError, Store};
 use daemonkit::{AuthenticatedStream, Bootstrap, Incoming, ServiceContext, Shutdown};
@@ -230,6 +232,7 @@ impl ServiceState {
             Command::OpenDocument(request) => self.open_document(request, true).await,
             Command::ChangeDocument(request) => self.open_document(request, false).await,
             Command::CloseDocument(request) => self.close_document(request).await,
+            Command::Query(request) => self.semantic_query(request).await,
             Command::RestartLean(request) => self.restart_lean(request).await,
             Command::CloseProject(request) => self.close_project(request).await,
         }
@@ -432,6 +435,49 @@ impl ServiceState {
         Ok(ResponsePayload::Project(
             project.snapshot(&daemon_generation),
         ))
+    }
+
+    async fn semantic_query(
+        &mut self,
+        request: SemanticQueryRequest,
+    ) -> Result<ResponsePayload, ServiceError> {
+        let daemon_generation = self.daemon_generation.clone();
+        let project = self.projects.get_mut(&request.project_id).ok_or_else(|| {
+            ServiceError::new(
+                ErrorCode::ProjectNotFound,
+                format!("unknown project {}", request.project_id),
+            )
+        })?;
+        project.check_generation(request.expected_lean_generation)?;
+        if project.overlays.is_empty() {
+            return Err(ServiceError::new(
+                ErrorCode::InvalidRequest,
+                "semantic queries require an open document that establishes the Lean snapshot",
+            )
+            .with_project(project.snapshot(&daemon_generation)));
+        }
+        if project.lean.is_none() {
+            if let Err(error) = project.restart_lean().await {
+                project.lean_state = LeanState::Degraded;
+                project.last_error = Some(error.to_string());
+                return Err(ServiceError::new(
+                    ErrorCode::LeanUnavailable,
+                    format!("cannot start Lean for semantic query: {error}"),
+                )
+                .with_project(project.snapshot(&daemon_generation)));
+            }
+        }
+        let result = query::execute(
+            project.lean.as_mut().expect("Lean was started above"),
+            request.query,
+        )
+        .await;
+        match result {
+            Ok(response) => Ok(ResponsePayload::Query(response)),
+            Err(error) => Err(project
+                .service_error_from_lean(error, &daemon_generation)
+                .await),
+        }
     }
 
     async fn restart_lean(
