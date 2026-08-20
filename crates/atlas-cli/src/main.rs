@@ -7,6 +7,7 @@ use atlas_client::{
         SemanticQueryRequest, WhyNotQuery,
     },
 };
+use serde_json::Value;
 use std::{env, path::Path};
 
 const USAGE: &str = r#"usage: atlas-cli <command> [args]
@@ -121,7 +122,7 @@ async fn send_query(
     )
 }
 
-async fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
+async fn read_json_value(path: &str) -> Result<Value, String> {
     let bytes = tokio::fs::read(Path::new(path))
         .await
         .map_err(|error| format!("{path}: {error}"))?;
@@ -219,7 +220,9 @@ async fn run(args: &[String]) -> Result<(), String> {
         ),
         "query" => {
             let project_id = arg(args, 1, "project-id")?.to_string();
-            let query: SemanticQuery = read_json(arg(args, 2, "query.json")?).await?;
+            let value = read_json_value(arg(args, 2, "query.json")?).await?;
+            let query: SemanticQuery = serde_json::from_value(value)
+                .map_err(|error| format!("invalid SemanticQuery: {error}"))?;
             send_query(&client, project_id, generation(args.get(3))?, query).await
         }
         "goal-match" => {
@@ -269,7 +272,9 @@ async fn run(args: &[String]) -> Result<(), String> {
             .await
         }
         "minimal-context" => {
-            let query: MinimalContextQuery = read_json(arg(args, 2, "spec.json")?).await?;
+            let value = read_json_value(arg(args, 2, "spec.json")?).await?;
+            let query: MinimalContextQuery = serde_json::from_value(value)
+                .map_err(|error| format!("invalid MinimalContextQuery: {error}"))?;
             send_query(
                 &client,
                 arg(args, 1, "project-id")?.into(),
