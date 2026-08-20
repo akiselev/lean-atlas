@@ -23,6 +23,7 @@ MCP = Path(required_env("ATLAS_M6_MCP"))
 ROOT = Path(required_env("ATLAS_M6_ROOT")).resolve()
 FIXTURE = Path(required_env("ATLAS_M6_FIXTURE")).resolve()
 FIXTURE_URI = required_env("ATLAS_M6_FIXTURE_URI")
+QUERY_POSITION = {"line": 8, "character": 0}
 
 
 def run_cli(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -78,6 +79,7 @@ def mcp_query(project_id: str, generation: int) -> dict:
                     "lean_generation": generation,
                     "goal": "True",
                     "candidates": ["True.intro", "double_two"],
+                    "position": QUERY_POSITION,
                 },
             },
         },
@@ -154,7 +156,7 @@ def main() -> None:
     instance_path = query_result(
         run_cli("instance-path", project_id, "Inhabited Nat"), "instance_path"
     )
-    assert instance_path["failure"] is None, instance_path
+    assert instance_path.get("failure") is None, instance_path
     assert instance_path["instance_pretty"], instance_path
     assert instance_path["dependencies"], instance_path
 
@@ -169,6 +171,7 @@ def main() -> None:
                         {"name": "h", "type_text": "True", "kind": "explicit"},
                         {"name": "n", "type_text": "Nat", "kind": "explicit"},
                     ],
+                    "position": QUERY_POSITION,
                     "max_evaluations": 8,
                 }
             )
@@ -195,7 +198,7 @@ def main() -> None:
         "compose",
     )
     assert composition["status"] == "proved", composition
-    assert composition["failure"] is None, composition
+    assert composition.get("failure") is None, composition
     assert composition["proof_pretty"], composition
 
     mcp = mcp_query(project_id, generation)
@@ -203,12 +206,10 @@ def main() -> None:
 
     restarted = project(run_cli("restart-lean", project_id, str(generation)))
     assert int(restarted["lean"]["generation"]) > generation, restarted
-    stale = run_cli(
-        "instance-path", project_id, "Inhabited Nat", check=False
-    )
+    fresh = run_cli("instance-path", project_id, "Inhabited Nat", check=False)
     # Named query commands intentionally omit a generation guard and remain usable
     # after a restart. The generic query path carries the explicit stale guard.
-    assert stale.returncode == 0, stale.stderr
+    assert fresh.returncode == 0, fresh.stderr
 
     run_cli("daemon-stop")
     print("M6 semantic query smoke: PASS")
