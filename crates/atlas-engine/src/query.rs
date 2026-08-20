@@ -1,9 +1,9 @@
 use crate::LeanOracle;
 use atlas_lean_client::{ClientError, LeanClient};
 use atlas_lean_protocol::{
-    ApplyResponse, ElaborateResponse, LeanFailure, LeanFailureKind, OracleResult, Position,
-    SynthInstanceResponse,
+    ApplyResponse, LeanFailure, LeanFailureKind, OracleResult, SynthInstanceResponse,
 };
+pub use atlas_lean_protocol::Position;
 use std::collections::BTreeSet;
 
 const DEFAULT_QUERY_LIMIT: usize = 64;
@@ -488,7 +488,7 @@ impl<'a> QueryEngine<'a> {
 }
 
 fn bounded_limit(value: usize) -> usize {
-    value.max(1).min(HARD_QUERY_LIMIT).max(DEFAULT_QUERY_LIMIT.min(value.max(1)))
+    value.max(1).min(HARD_QUERY_LIMIT)
 }
 
 fn oracle_value<T>(
