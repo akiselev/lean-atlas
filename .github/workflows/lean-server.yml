@@ -74,3 +74,19 @@ jobs:
           export ATLAS_M5_FIXTURE="$(realpath lean-server/Fixtures/RpcSmoke.lean)"
           export ATLAS_M5_FIXTURE_URI="$(python3 -c 'import pathlib; print(pathlib.Path("lean-server/Fixtures/RpcSmoke.lean").resolve().as_uri())')"
           python3 scripts/m5-atlasd-smoke.py
+      - name: Live atlasd M6 semantic query smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.elan/bin:$PATH"
+          cargo build -p atlasd -p atlas-cli -p atlas-mcp
+          export ATLASD_BIN="$(realpath target/debug/atlasd)"
+          export ATLAS_LEAN_BIN="$(command -v lean)"
+          export ATLAS_LEAN_PLUGIN="${{ steps.plugin.outputs.plugin }}"
+          export ATLAS_LEAN_ROOT_URI="$(python3 -c 'import pathlib; print(pathlib.Path("lean-server").resolve().as_uri())')"
+          export ATLAS_M6_CLI="$(realpath target/debug/atlas-cli)"
+          export ATLAS_M6_MCP="$(realpath target/debug/atlas-mcp)"
+          export ATLAS_M6_ROOT="$(realpath lean-server)"
+          export ATLAS_M6_FIXTURE="$(realpath lean-server/Fixtures/RpcSmoke.lean)"
+          export ATLAS_M6_FIXTURE_URI="$(python3 -c 'import pathlib; print(pathlib.Path("lean-server/Fixtures/RpcSmoke.lean").resolve().as_uri())')"
+          python3 scripts/m6-query-smoke.py
