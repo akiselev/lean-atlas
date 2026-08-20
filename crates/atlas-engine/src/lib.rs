@@ -1,3 +1,4 @@
+pub mod query;
 pub mod runtime;
 
 use atlas_lean_client::{ClientError, LeanClient};
